@@ -1,0 +1,26 @@
+name: gojika
+description: "A new Flutter project."
+
+publish_to: 'none'
+# La ligne 'suffix.' a été supprimée d'ici.
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0' # J'ai ajusté ceci pour correspondre au SDK de votre prototype
+
+dependencies:
+  flutter:
+    sdk: flutter
+  shared:
+    path: ../shared # <- Déplacé ici, dans dependencies
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 'shared' a été retiré d'ici.
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

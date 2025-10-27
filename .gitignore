@@ -1,0 +1,18 @@
+# Fichiers Supabase sensibles (Conformément à )
+supabase/.env
+supabase/volumes/
+
+# Fichiers Flutter
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+build/
+
+# Fichiers IDE
+.idea/
+.vscode/
+
+# Fichiers OS
+.DS_Store
