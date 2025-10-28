@@ -1,108 +1,53 @@
 // rejistra/lib/main.dart
+// ignore_for_file: prefer_const_constructors
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import 'package:rejistra/providers/data_provider.dart'; // <-- Ajoutez ceci
-import 'package:rejistra/screens/dashboard/dashboard_page.dart'; // <-- Ajoutez ceci
-import 'package:rejistra/screens/inscription/inscription_page.dart'; // <-- Ajoutez ceci
-import 'package:shared/services/supabase_service.dart';
-import 'package:rejistra/providers/auth_provider.dart';
-import 'package:rejistra/screens/auth/login_page.dart';
 import 'package:google_fonts/google_fonts.dart';
+
+import 'package:shared/services/supabase_service.dart';
+import 'package:rejistra/providers/data_provider.dart';
+import 'package:rejistra/providers/auth_provider.dart';
+
+import 'package:rejistra/widgets/main_layout.dart';
+
+import 'package:rejistra/screens/auth/login_page.dart';
+import 'package:rejistra/screens/dashboard/dashboard_page.dart';
+import 'package:rejistra/screens/inscription/inscription_page.dart';
+
+import 'package:rejistra/screens/paiement/autre_paiement_page.dart';
+import 'package:rejistra/screens/paiement/paiement_etudiant_page.dart';
+import 'package:rejistra/screens/etat/etat_individuel_page.dart';
+import 'package:rejistra/screens/etat/etat_groupe_bag_page.dart';
+import 'package:rejistra/screens/admin/user_management_page.dart';
+import 'package:rejistra/screens/admin/admin_edit_page.dart';
+import 'package:rejistra/screens/admin/audit_log_page.dart';
+import 'package:rejistra/screens/about_page.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Initialiser Supabase
   await SupabaseService.initialize();
-
   runApp(
-    // Enveloppez l'application avec les providers
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (context) => AuthProvider()),
-        ChangeNotifierProvider(create: (context) => DataProvider()), // <-- Ajoutez ceci
+        ChangeNotifierProvider(create: (context) => DataProvider()),
       ],
       child: const RejistraApp(),
     ),
   );
 }
 
-// --- Placeholders (seront remplacés en Phase 1.1) ---
-
-// Placeholder pour le Layout Principal
-class MainLayout extends StatelessWidget {
-  final Widget child;
-  const MainLayout({required this.child, Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Row(
-        children: [
-          // Menu latéral simple
-          NavigationRail(
-            selectedIndex: 0,
-            onDestinationSelected: (index) {
-              if (index == 0) context.go('/');
-              if (index == 1) context.go('/inscription');
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: const [
-              NavigationRailDestination(
-                icon: Icon(Icons.dashboard),
-                label: Text('Dashboard'),
-              ),
-              NavigationRailDestination(
-                icon: Icon(Icons.person_add),
-                label: Text('Inscription'),
-              ),
-            ],
-          ),
-          // Zone principale
-          Expanded(child: child),
-        ],
-      ),
-    );
-  }
-}
-
-
-/*
-Placeholder pour le Dashboard
-class DashboardPage extends StatelessWidget {
-  const DashboardPage({Key? key}) : super(key: key);
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text("Dashboard (À venir - Phase 1.1)"),
-          SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () => context.read<AuthProvider>().logout(),
-            child: Text("Déconnexion"),
-          )
-        ],
-      ),
-    );
-  }
-}
- --- Fin des Placeholders ---
-*/
-// Configuration de l'App (adapté de )
 class RejistraApp extends StatelessWidget {
   const RejistraApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = GoogleFonts.latoTextTheme(Theme.of(context).textTheme);
-
-    // Récupérer l'instance unique du AuthProvider (sans écouter)
     final authProvider = context.read<AuthProvider>();
 
-    // Initialisation du router ici
-    final _router = GoRouter(
+    final router = GoRouter(
       routes: [
         GoRoute(
           path: '/login',
@@ -114,39 +59,45 @@ class RejistraApp extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           ),
         ),
+        // Le ShellRoute englobe toutes les pages après connexion
         ShellRoute(
-          builder: (context, state, child) => MainLayout(child: child),
+          builder: (context, state, child) {
+            // Seuls les rôles Admin et Contrôleur voient le dashboard.
+            // Le rôle Accueil est redirigé vers l'inscription.
+            final userRole = context.read<AuthProvider>().currentUser?.role;
+            if (userRole == 'accueil' && state.matchedLocation == '/') {
+              // Redirection pour le rôle 'accueil'
+              Future.microtask(() => context.go('/inscription'));
+              return Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+            return MainLayout(child: child);
+          },
           routes: [
-            GoRoute(
-              path: '/',
-              builder: (context, state) => DashboardPage(),
-            ),
-            GoRoute(
-              path: '/inscription',
-              builder: (context, state) => InscriptionPage(),
-            ),
+            GoRoute(path: '/', builder: (context, state) => DashboardPage()),
+            GoRoute(path: '/inscription', builder: (context, state) => InscriptionPage()),
+            GoRoute(path: '/paiements-etudiants', builder: (context, state) => PaiementEtudiantPage()),
+            GoRoute(path: '/paiements-autres', builder: (context, state) => AutrePaiementPage()),
+            //GoRoute(path: '/etat-individuel', builder: (context, state) => EtatIndividuelPage()),
+            //GoRoute(path: '/etat-groupe', builder: (context, state) => EtatGroupeBagPage()),
+            //GoRoute(path: '/admin/users', builder: (context, state) => UserManagementPage()),
+            //GoRoute(path: '/admin/edit', builder: (context, state) => AdminEditPage()),
+            //GoRoute(path: '/admin/audit', builder: (context, state) => AuditLogPage()),
+            //GoRoute(path: '/a-propos', builder: (context, state) => AboutPage()),
           ],
         ),
       ],
-
-      // ✅ Correction ici : listen: false
       redirect: (BuildContext context, GoRouterState state) {
         final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
-        if (authProvider.isLoading) {
-          return '/loading';
-        }
+        if (authProvider.isLoading) return '/loading';
 
         final isLoggedIn = authProvider.isLoggedIn;
-        final isLoggingIn = state.matchedLocation == '/login' ||
-            state.matchedLocation == '/loading';
+        final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/loading';
 
         if (!isLoggedIn && !isLoggingIn) return '/login';
         if (isLoggedIn && isLoggingIn) return '/';
+
         return null;
       },
-
-      // ✅ Correction ici : utiliser le ChangeNotifier existant
       refreshListenable: authProvider,
     );
 
@@ -157,24 +108,28 @@ class RejistraApp extends StatelessWidget {
         useMaterial3: true,
         colorSchemeSeed: Colors.blueGrey,
         brightness: Brightness.light,
-        textTheme: textTheme,
-        inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
+        textTheme: GoogleFonts.latoTextTheme(Theme.of(context).textTheme),
+        cardTheme: CardThemeData(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: Colors.grey.shade300, width: 1),
           ),
+        ),
+        inputDecorationTheme: InputDecorationTheme(
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
           filled: true,
           fillColor: Colors.grey.shade100,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
         ),
       ),
-      routerConfig: _router,
+      routerConfig: router,
     );
   }
 }
