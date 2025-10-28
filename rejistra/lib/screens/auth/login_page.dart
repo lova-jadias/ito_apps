@@ -24,7 +24,7 @@ class _LoginPageState extends State<LoginPage> {
     setState(() { _isLoading = true; });
 
     // Appel au VRAI AuthProvider
-    final authProvider = context.read<AuthProvider>();
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final success = await authProvider.login(
       _emailController.text,
       _passwordController.text,
@@ -32,7 +32,7 @@ class _LoginPageState extends State<LoginPage> {
 
     // La redirection est gérée par le GoRouter
     // Nous gérons seulement l'échec ici
-    if (!success && mounted) {
+    if (!(success==true) && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
             content: Text("Email ou mot de passe incorrect."),

@@ -1,82 +1,120 @@
-// rejistra/lib/providers/auth_provider.dart
+// ignore_for_file: prefer_const_constructors
+import 'dart:async';
+//import 'packagedart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared/models/profile.dart';
-import 'package:shared/models/user_role_enum.dart'; // <-- CORRECTION AJOUTÉE ICI
+
+// Modèle de profil local (corrigé)
+class Profile {
+  final String id;
+  final String email;
+  final String role;
+  final String site;
+  final String nomComplet; // <-- CORRECTION: 'nom' est devenu 'nomComplet'
+
+  Profile({
+    required this.id,
+    required this.email,
+    required this.role,
+    required this.site,
+    required this.nomComplet, // <-- CORRECTION
+  });
+
+  factory Profile.fromJson(Map<String, dynamic> json) {
+    return Profile(
+      id: json['id'] ?? '',
+      email: json['email'] ?? '',
+      role: json['role'] ?? 'inconnu',
+      site: json['site_rattache'] ?? 'inconnu',
+      nomComplet: json['nom_complet'] ?? 'Utilisateur', // <-- CORRECTION
+    );
+  }
+}
 
 class AuthProvider extends ChangeNotifier {
-  final GoTrueClient _auth = Supabase.instance.client.auth;
+  final SupabaseClient _client = Supabase.instance.client;
+  StreamSubscription<AuthState>? _authStateSubscription;
+
   Profile? _currentUser;
   Profile? get currentUser => _currentUser;
 
-  bool get isLoggedIn => _currentUser != null;
   bool _isLoading = true;
   bool get isLoading => _isLoading;
 
-  AuthProvider() {
-    _isLoading = true;
-    notifyListeners();
+  bool get isLoggedIn => _currentUser != null;
 
-    // Écouter les changements d'état d'authentification
-    _auth.onAuthStateChange.listen((data) {
-      final Session? session = data.session;
-      if (session != null) {
-        _fetchUserProfile(session.user.id);
-      } else {
-        _currentUser = null;
-        _isLoading = false;
-        notifyListeners();
-      }
-    });
+  AuthProvider() {
+    _authStateSubscription =
+        _client.auth.onAuthStateChange.listen((data) async {
+          final session = data.session;
+          if (session != null) {
+            // L'utilisateur est connecté, chercher son profil
+            await _fetchUserProfile(session.user.id);
+          } else {
+            _currentUser = null;
+            _isLoading = false;
+            notifyListeners();
+          }
+        });
+    // Vérifier l'état de connexion au démarrage
+    _checkInitialSession();
   }
 
-  // Récupérer le profil depuis la table 'profiles'
+  Future<void> _checkInitialSession() async {
+    final session = _client.auth.currentSession;
+    if (session != null) {
+      await _fetchUserProfile(session.user.id);
+    } else {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   Future<void> _fetchUserProfile(String userId) async {
+    _isLoading = true;
+    notifyListeners();
     try {
-      final response = await Supabase.instance.client
+      final response = await _client
           .from('profiles')
-          .select()
+          .select('id, email, role, site_rattache, nom_complet') // <-- CORRECTION
           .eq('id', userId)
           .single();
 
-      _currentUser = Profile.fromMap(response);
-      _isLoading = false;
-      notifyListeners();
+      _currentUser = Profile.fromJson(response);
     } catch (e) {
-      debugPrint("Erreur de fetch profile: $e");
       _currentUser = null;
-      _isLoading = false;
-      notifyListeners();
+      // Gérer l'erreur, par exemple:
+      print("Erreur fetchUserProfile: $e");
     }
-  }
-
-  // Connexion
-  Future<bool> login(String email, String password) async {
-    _isLoading = true;
+    _isLoading = false;
     notifyListeners();
+  }
+
+  Future<String?> login(String email, String password) async {
     try {
-      final response = await _auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      // Le listener 'onAuthStateChange' s'occupera du reste
-      return response.session != null;
+      final response = await _client.auth
+          .signInWithPassword(email: email, password: password);
+      if (response.user != null) {
+        await _fetchUserProfile(response.user!.id);
+        return null; // Succès
+      }
+    } on AuthException catch (e) {
+      return e.message;
     } catch (e) {
-      debugPrint("Erreur de login: $e");
-      _isLoading = false;
-      notifyListeners();
-      return false;
+      return "Une erreur inattendue est survenue.";
     }
+    return "Erreur inconnue.";
   }
 
-  // Déconnexion
-  void logout() {
-    _auth.signOut();
+  Future<void> logout() async {
+    await _client.auth.signOut();
+    _currentUser = null;
+    notifyListeners();
   }
 
-  // Utile pour la navigation (ex: Rôle 'accueil')
-  bool hasRole(List<UserRole> roles) {
-    if (_currentUser == null) return false;
-    return roles.contains(_currentUser!.role);
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }

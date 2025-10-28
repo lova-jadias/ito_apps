@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:rejistra/providers/data_provider.dart'; // <-- Ajoutez ceci
+import 'package:rejistra/screens/dashboard/dashboard_page.dart'; // <-- Ajoutez ceci
+import 'package:rejistra/screens/inscription/inscription_page.dart'; // <-- Ajoutez ceci
 import 'package:shared/services/supabase_service.dart';
 import 'package:rejistra/providers/auth_provider.dart';
 import 'package:rejistra/screens/auth/login_page.dart';
@@ -13,8 +16,12 @@ void main() async {
   await SupabaseService.initialize();
 
   runApp(
-    ChangeNotifierProvider(
-      create: (context) => AuthProvider(),
+    // Enveloppez l'application avec les providers
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => DataProvider()), // <-- Ajoutez ceci
+      ],
       child: const RejistraApp(),
     ),
   );
@@ -29,23 +36,39 @@ class MainLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Le vrai layout sera implémenté au Bloc 1.1
     return Scaffold(
-      appBar: AppBar(
-        title: Text("REJISTRA (Phase 0)"),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () => context.read<AuthProvider>().logout(),
-          )
+      body: Row(
+        children: [
+          // Menu latéral simple
+          NavigationRail(
+            selectedIndex: 0,
+            onDestinationSelected: (index) {
+              if (index == 0) context.go('/');
+              if (index == 1) context.go('/inscription');
+            },
+            labelType: NavigationRailLabelType.all,
+            destinations: const [
+              NavigationRailDestination(
+                icon: Icon(Icons.dashboard),
+                label: Text('Dashboard'),
+              ),
+              NavigationRailDestination(
+                icon: Icon(Icons.person_add),
+                label: Text('Inscription'),
+              ),
+            ],
+          ),
+          // Zone principale
+          Expanded(child: child),
         ],
       ),
-      body: child,
     );
   }
 }
 
-// Placeholder pour le Dashboard
+
+/*
+Placeholder pour le Dashboard
 class DashboardPage extends StatelessWidget {
   const DashboardPage({Key? key}) : super(key: key);
   @override
@@ -65,8 +88,8 @@ class DashboardPage extends StatelessWidget {
     );
   }
 }
-// --- Fin des Placeholders ---
-
+ --- Fin des Placeholders ---
+*/
 // Configuration de l'App (adapté de )
 class RejistraApp extends StatelessWidget {
   const RejistraApp({Key? key}) : super(key: key);
@@ -75,14 +98,16 @@ class RejistraApp extends StatelessWidget {
   Widget build(BuildContext context) {
     final textTheme = GoogleFonts.latoTextTheme(Theme.of(context).textTheme);
 
-    // Initialisation du routeur ici
+    // Récupérer l'instance unique du AuthProvider (sans écouter)
+    final authProvider = context.read<AuthProvider>();
+
+    // Initialisation du router ici
     final _router = GoRouter(
       routes: [
         GoRoute(
           path: '/login',
           builder: (context, state) => LoginPage(),
         ),
-        // <-- CORRECTION : Route de chargement déplacée ici
         GoRoute(
           path: '/loading',
           builder: (context, state) => Scaffold(
@@ -90,42 +115,39 @@ class RejistraApp extends StatelessWidget {
           ),
         ),
         ShellRoute(
-          builder: (context, state, child) {
-            return MainLayout(child: child);
-          },
+          builder: (context, state, child) => MainLayout(child: child),
           routes: [
             GoRoute(
               path: '/',
               builder: (context, state) => DashboardPage(),
             ),
-            // Les autres routes (inscription, paiements...)
-            // seront ajoutées dans la Phase 1
+            GoRoute(
+              path: '/inscription',
+              builder: (context, state) => InscriptionPage(),
+            ),
           ],
         ),
       ],
-      // Logique de redirection
-      redirect: (BuildContext context, GoRouterState state) {
-        final authProvider = Provider.of<AuthProvider>(context, listen: true);
 
-        // Si l'app est en cours de chargement (vérification du login)
+      // ✅ Correction ici : listen: false
+      redirect: (BuildContext context, GoRouterState state) {
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
         if (authProvider.isLoading) {
-          // Affiche un écran de chargement simple pendant la vérification
           return '/loading';
         }
 
         final isLoggedIn = authProvider.isLoggedIn;
-        final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/loading';
+        final isLoggingIn = state.matchedLocation == '/login' ||
+            state.matchedLocation == '/loading';
 
-        if (!isLoggedIn && !isLoggingIn) {
-          return '/login';
-        }
-        if (isLoggedIn && isLoggingIn) {
-          return '/';
-        }
-        return null; // Pas de redirection nécessaire
+        if (!isLoggedIn && !isLoggingIn) return '/login';
+        if (isLoggedIn && isLoggingIn) return '/';
+        return null;
       },
-      // <-- CORRECTION : Simplification du refreshListenable
-      refreshListenable: Provider.of<AuthProvider>(context),
+
+      // ✅ Correction ici : utiliser le ChangeNotifier existant
+      refreshListenable: authProvider,
     );
 
     return MaterialApp.router(
