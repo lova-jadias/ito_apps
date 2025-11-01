@@ -1,5 +1,5 @@
 // rejistra/lib/screens/dashboard/dashboard_page.dart
-// ignore_for_file: prefer_const_constructors
+// ignore_for_file: prefer_const_constructors, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -7,7 +7,17 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:rejistra/providers/auth_provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:rejistra/providers/data_provider.dart';
+import 'package:rejistra/utils/helpers.dart';
 
+// Classe pour stocker les données du dashboard
+class DashboardData {
+  final DashboardStats kpis;
+  final DashboardCharts charts;
+  DashboardData({required this.kpis, required this.charts});
+}
+
+// Classe pour les KPIs (venant de la RPC)
 class DashboardStats {
   final int effectifBrut;
   final int abandons;
@@ -22,75 +32,95 @@ class DashboardStats {
     this.caJournalier = 0,
     this.caGlobal = 0,
   });
+
+  factory DashboardStats.fromJson(Map<String, dynamic> json) {
+    return DashboardStats(
+      effectifBrut: json['effectifBrut'] ?? 0,
+      abandons: json['abandons'] ?? 0,
+      effectifNet: json['effectifNet'] ?? 0,
+      caJournalier: (json['caJournalier'] as num?)?.toDouble() ?? 0.0,
+      caGlobal: (json['caGlobal'] as num?)?.toDouble() ?? 0.0,
+    );
+  }
+}
+
+// Classe pour les données des graphiques
+class DashboardCharts {
+  // Clé = nom du site/groupe, Valeur = count
+  final Map<String, dynamic> effectifs;
+  // Clé = 'YYYY-MM', Valeur = total
+  final Map<String, dynamic> caMensuel;
+
+  DashboardCharts({this.effectifs = const {}, this.caMensuel = const {}});
+
+  factory DashboardCharts.fromJson(Map<String, dynamic> json) {
+    return DashboardCharts(
+      effectifs: json['effectifs'] ?? {},
+      caMensuel: json['caMensuel'] ?? {},
+    );
+  }
 }
 
 class DashboardPage extends StatefulWidget {
   const DashboardPage({Key? key}) : super(key: key);
-
   @override
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
 class _DashboardPageState extends State<DashboardPage> {
   final SupabaseClient _client = Supabase.instance.client;
-  Future<DashboardStats>? _statsFuture;
+  Future<DashboardData>? _statsFuture;
+
+  String? _selectedSite; // null = 'FULL'
 
   @override
-  void initState() {
-    super.initState();
-    _statsFuture = _fetchDashboardStats();
-  }
-
-  Future<DashboardStats> _fetchDashboardStats() async {
-    try {
-      // --- Effectifs ---
-      // CORRECTION: La méthode .count() est appelée sur le query builder.
-      // Elle retourne un objet PostgrestResponse dont on lit la propriété .count.
-      final brutRes = await _client.from('etudiants').select().count();
-      final abandonRes = await _client.from('etudiants').select().eq('statut', 'Abandon').count();
-
-      final int brut = brutRes.count;
-      final int abandons = abandonRes.count;
-      final int net = brut - abandons;
-
-      // --- Finances ---
-      final now = DateTime.now();
-      // Formatage pour être compatible avec le type TIMESTAMPTZ de Supabase
-      final todayStart = DateTime(now.year, now.month, now.day).toIso8601String();
-      final todayEnd = DateTime(now.year, now.month, now.day, 23, 59, 59).toIso8601String();
-
-      // On récupère la liste des montants du jour
-      final caJourRes = await _client
-          .from('recus')
-          .select('montant_total')
-          .gte('date_paiement', todayStart)
-          .lte('date_paiement', todayEnd);
-
-      // On additionne les montants récupérés
-      final double caJournalier = caJourRes.fold(0.0, (sum, item) => sum + (item['montant_total'] ?? 0.0));
-
-      // On fait de même pour le CA global
-      final caGlobalRes = await _client.from('recus').select('montant_total');
-      final double caGlobal = caGlobalRes.fold(0.0, (sum, item) => sum + (item['montant_total'] ?? 0.0));
-
-      return DashboardStats(
-        effectifBrut: brut,
-        abandons: abandons,
-        effectifNet: net,
-        caJournalier: caJournalier,
-        caGlobal: caGlobal,
-      );
-    } catch (e) {
-      print("Erreur fetchDashboardStats: $e");
-      // Renvoyer une exception plus claire pour l'UI
-      throw Exception("Impossible de charger les statistiques. Vérifiez la connexion et les permissions RLS.");
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Initialiser le filtre basé sur le rôle de l'utilisateur
+    if (_statsFuture == null) {
+      final user = Provider.of<AuthProvider>(context, listen: false).currentUser;
+      if (user != null && user.site != 'FULL') {
+        _selectedSite = user.site;
+      }
+      _refreshData();
     }
   }
 
+  Future<DashboardData> _fetchDashboardData() async {
+    try {
+      // 1. Appeler la RPC pour les KPIs
+      final kpiRes = await _client.rpc(
+        'get_dashboard_kpis',
+        params: {'site_filter': _selectedSite},
+      );
+      final kpis = DashboardStats.fromJson(kpiRes);
+
+      // 2. Appeler la RPC pour les graphiques
+      final chartRes = await _client.rpc(
+        'get_dashboard_charts',
+        params: {'site_filter': _selectedSite},
+      );
+      final charts = DashboardCharts.fromJson(chartRes);
+
+      return DashboardData(kpis: kpis, charts: charts);
+    } catch (e) {
+      if(mounted) {
+        showErrorSnackBar(context, "Erreur RPC: $e");
+      }
+      throw Exception("Impossible de charger les données du dashboard.");
+    }
+  }
 
   void _refreshData() {
     setState(() {
-      _statsFuture = _fetchDashboardStats();
+      _statsFuture = _fetchDashboardData();
+    });
+  }
+
+  void _onFilterChanged(String? newSite) {
+    setState(() {
+      _selectedSite = (newSite == "FULL") ? null : newSite;
+      _refreshData();
     });
   }
 
@@ -98,6 +128,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final numberFormat = NumberFormat.decimalPattern('fr');
+    final bool canFilter = auth.currentUser?.site == 'FULL';
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -106,6 +137,8 @@ class _DashboardPageState extends State<DashboardPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // Affiche le filtre de site
+          if (canFilter) _buildFilterBar(context),
           IconButton(
             icon: Icon(Icons.refresh),
             onPressed: _refreshData,
@@ -123,11 +156,13 @@ class _DashboardPageState extends State<DashboardPage> {
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             Text(
-              'Bienvenue sur votre tour de contrôle.',
+              _selectedSite == null
+                  ? 'Vue d\'ensemble de tous les sites.'
+                  : 'Vue d\'ensemble du site: $_selectedSite',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey.shade700),
             ),
             SizedBox(height: 24),
-            FutureBuilder<DashboardStats>(
+            FutureBuilder<DashboardData>(
               future: _statsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -139,7 +174,10 @@ class _DashboardPageState extends State<DashboardPage> {
                 if (!snapshot.hasData) {
                   return Center(child: Text("Aucune donnée."));
                 }
-                final stats = snapshot.data!;
+
+                final stats = snapshot.data!.kpis;
+                final charts = snapshot.data!.charts;
+
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -160,13 +198,13 @@ class _DashboardPageState extends State<DashboardPage> {
                       spacing: 16, runSpacing: 16,
                       children: [
                         _KpiCard(title: 'CA Journalier', value: "${numberFormat.format(stats.caJournalier)} Ar", icon: Icons.today, color: Colors.purple),
-                        _KpiCard(title: 'CA Global', value: "${numberFormat.format(stats.caGlobal)} Ar", icon: Icons.attach_money, color: Colors.teal),
+                        _KpiCard(title: 'CA Global (Filtré)', value: "${numberFormat.format(stats.caGlobal)} Ar", icon: Icons.attach_money, color: Colors.teal),
                       ],
                     ),
                     SizedBox(height: 24),
                     Text("Analyse Visuelle", style: Theme.of(context).textTheme.headlineSmall),
                     SizedBox(height: 16),
-                    _buildChartsSection(),
+                    _buildChartsSection(charts),
                   ],
                 );
               },
@@ -176,7 +214,32 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
     );
   }
-  Widget _buildChartsSection() {
+
+  // Filtre de site (pour utilisateurs FULL)
+  Widget _buildFilterBar(BuildContext context) {
+    final config = context.watch<DataProvider>().configOptions;
+    final sites = config['Site'] ?? [];
+
+    // Ajoute l'option "FULL" si elle n'existe pas
+    if (!sites.contains('FULL')) {
+      sites.insert(0, 'FULL');
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 16.0),
+      child: DropdownButton<String>(
+        value: _selectedSite ?? "FULL",
+        underline: SizedBox.shrink(),
+        items: sites.map((site) => DropdownMenuItem(
+          value: site,
+          child: Text(site == 'FULL' ? "Tous les sites" : "Site: $site"),
+        )).toList(),
+        onChanged: _onFilterChanged,
+      ),
+    );
+  }
+
+  Widget _buildChartsSection(DashboardCharts charts) {
     return LayoutBuilder(
       builder: (context, constraints) {
         bool isWide = constraints.maxWidth > 800;
@@ -184,55 +247,84 @@ class _DashboardPageState extends State<DashboardPage> {
             ? Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(flex: 2, child: _buildCaChartCard()),
+            Expanded(flex: 2, child: _buildCaChartCard(charts.caMensuel)),
             SizedBox(width: 16),
-            Expanded(flex: 1, child: _buildSitePieChartCard("Effectifs par Site")),
+            Expanded(flex: 1, child: _buildPieChartCard(charts.effectifs)),
           ],
         )
             : Column(
           children: [
-            _buildCaChartCard(),
+            _buildCaChartCard(charts.caMensuel),
             SizedBox(height: 16),
-            _buildSitePieChartCard("Effectifs par Site"),
+            _buildPieChartCard(charts.effectifs),
           ],
         );
       },
     );
   }
 
-  Widget _buildCaChartCard() {
+  // Graphique CA (dynamique)
+  Widget _buildCaChartCard(Map<String, dynamic> caMensuel) {
+    final numberFormat = NumberFormat.compact(locale: 'fr');
+    final List<BarChartGroupData> barGroups = [];
+    final List<String> months = caMensuel.keys.toList();
+
+    for (int i = 0; i < months.length; i++) {
+      barGroups.add(
+        BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                  toY: (caMensuel[months[i]] as num).toDouble(),
+                  color: Colors.blue,
+                  width: 20,
+                  borderRadius: BorderRadius.circular(4)
+              )
+            ]
+        ),
+      );
+    }
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Évolution du Chiffre d'Affaires (Global)", style: Theme.of(context).textTheme.titleLarge),
-            Text("Simulation de CA mensuel", style: Theme.of(context).textTheme.bodyMedium),
+            Text("Évolution du Chiffre d'Affaires", style: Theme.of(context).textTheme.titleLarge),
+            Text("12 derniers mois", style: Theme.of(context).textTheme.bodyMedium),
             SizedBox(height: 24),
             SizedBox(
               height: 300,
-              child: BarChart(
+              child: caMensuel.isEmpty
+                  ? Center(child: Text("Aucune donnée de CA."))
+                  : BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
                   borderData: FlBorderData(show: false),
-                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 100000),
+                  gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: 50000),
                   titlesData: FlTitlesData(
-                    leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, reservedSize: 60, getTitlesWidget: (value, meta) => Text("${(value / 1000).toStringAsFixed(0)}k Ar"))),
+                    leftTitles: AxisTitles(sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 60,
+                        getTitlesWidget: (value, meta) => Text(numberFormat.format(value))
+                    )),
                     rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
                     topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                    bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: true, getTitlesWidget: (value, meta) {
-                      const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai'];
-                      return Text(months[value.toInt()]);
-                    })),
+                    bottomTitles: AxisTitles(sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (value, meta) {
+                          final index = value.toInt();
+                          if (index < months.length) {
+                            // Format 'YYYY-MM' en 'MM/YY'
+                            final parts = months[index].split('-');
+                            return Text("${parts[1]}/${parts[0].substring(2)}");
+                          }
+                          return Text("");
+                        }
+                    )),
                   ),
-                  barGroups: [
-                    BarChartGroupData(x: 0, barRods: [BarChartRodData(toY: 450000, color: Colors.blue, width: 20, borderRadius: BorderRadius.circular(4))]),
-                    BarChartGroupData(x: 1, barRods: [BarChartRodData(toY: 320000, color: Colors.blue, width: 20, borderRadius: BorderRadius.circular(4))]),
-                    BarChartGroupData(x: 2, barRods: [BarChartRodData(toY: 600000, color: Colors.blue, width: 20, borderRadius: BorderRadius.circular(4))]),
-                    BarChartGroupData(x: 3, barRods: [BarChartRodData(toY: 550000, color: Colors.blue, width: 20, borderRadius: BorderRadius.circular(4))]),
-                    BarChartGroupData(x: 4, barRods: [BarChartRodData(toY: 710000, color: Colors.blue, width: 20, borderRadius: BorderRadius.circular(4))]),
-                  ],
+                  barGroups: barGroups,
                 ),
               ),
             ),
@@ -242,28 +334,44 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildSitePieChartCard(String title) {
+  // Graphique Camembert (dynamique)
+  Widget _buildPieChartCard(Map<String, dynamic> effectifs) {
+    final List<Color> colors = [Colors.blue, Colors.green, Colors.orange, Colors.red, Colors.purple, Colors.teal];
+    int colorIndex = 0;
+
+    final sections = effectifs.entries.map((entry) {
+      final color = colors[colorIndex % colors.length];
+      colorIndex++;
+      return PieChartSectionData(
+          value: (entry.value as num).toDouble(),
+          title: '${entry.key}\n(${(entry.value as num)})',
+          color: color,
+          radius: 80,
+          titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12)
+      );
+    }).toList();
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            Text(
+                _selectedSite == null ? "Effectifs par Site" : "Effectifs par Groupe",
+                style: Theme.of(context).textTheme.titleLarge
+            ),
             Text("Répartition des étudiants (brut)", style: Theme.of(context).textTheme.bodyMedium),
             SizedBox(height: 24),
             SizedBox(
               height: 300,
-              child: PieChart(
+              child: effectifs.isEmpty
+                  ? Center(child: Text("Aucune donnée d'effectif."))
+                  : PieChart(
                   PieChartData(
                       sectionsSpace: 4,
                       centerSpaceRadius: 60,
-                      sections: [ // NOTE: Données en dur pour l'instant
-                        PieChartSectionData(value: 40, title: 'Tana (40)', color: Colors.blue, radius: 80, titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        PieChartSectionData(value: 25, title: 'Toamasina (25)', color: Colors.green, radius: 80, titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        PieChartSectionData(value: 20, title: 'Mahajanga (20)', color: Colors.orange, radius: 80, titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        PieChartSectionData(value: 15, title: 'Antsirabe (15)', color: Colors.red, radius: 80, titleStyle: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                      ]
+                      sections: sections
                   )
               ),
             ),
@@ -274,12 +382,12 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
+
 class _KpiCard extends StatelessWidget {
   final String title;
   final String value;
   final IconData icon;
   final Color color;
-
   const _KpiCard({Key? key, required this.title, required this.value, required this.icon, required this.color}) : super(key: key);
 
   @override

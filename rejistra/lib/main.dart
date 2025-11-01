@@ -62,14 +62,21 @@ class RejistraApp extends StatelessWidget {
         // Le ShellRoute englobe toutes les pages après connexion
         ShellRoute(
           builder: (context, state, child) {
-            // Seuls les rôles Admin et Contrôleur voient le dashboard.
-            // Le rôle Accueil est redirigé vers l'inscription.
             final userRole = context.read<AuthProvider>().currentUser?.role;
+
+            // Redirection pour 'Accueil' vers l'inscription si sur la racine
             if (userRole == 'accueil' && state.matchedLocation == '/') {
-              // Redirection pour le rôle 'accueil'
               Future.microtask(() => context.go('/inscription'));
               return Scaffold(body: Center(child: CircularProgressIndicator()));
             }
+
+            // Redirection pour 'Responsable' et 'Controleur' vers le dashboard
+            // (Ils n'ont pas accès à l'inscription par défaut)
+            if ((userRole == 'responsable' || userRole == 'controleur') && state.matchedLocation == '/inscription') {
+              Future.microtask(() => context.go('/'));
+              return Scaffold(body: Center(child: CircularProgressIndicator()));
+            }
+
             return MainLayout(child: child);
           },
           routes: [
@@ -77,12 +84,12 @@ class RejistraApp extends StatelessWidget {
             GoRoute(path: '/inscription', builder: (context, state) => InscriptionPage()),
             GoRoute(path: '/paiements-etudiants', builder: (context, state) => PaiementEtudiantPage()),
             GoRoute(path: '/paiements-autres', builder: (context, state) => AutrePaiementPage()),
-            //GoRoute(path: '/etat-individuel', builder: (context, state) => EtatIndividuelPage()),
-            //GoRoute(path: '/etat-groupe', builder: (context, state) => EtatGroupeBagPage()),
-            //GoRoute(path: '/admin/users', builder: (context, state) => UserManagementPage()),
-            //GoRoute(path: '/admin/edit', builder: (context, state) => AdminEditPage()),
-            //GoRoute(path: '/admin/audit', builder: (context, state) => AuditLogPage()),
-            //GoRoute(path: '/a-propos', builder: (context, state) => AboutPage()),
+            GoRoute(path: '/etat-individuel', builder: (context, state) => EtatIndividuelPage()),
+            GoRoute(path: '/etat-groupe', builder: (context, state) => EtatGroupeBagPage()),
+            GoRoute(path: '/admin/users', builder: (context, state) => UserManagementPage()),
+            GoRoute(path: '/admin/edit', builder: (context, state) => AdminEditPage()),
+            GoRoute(path: '/admin/audit', builder: (context, state) => AuditLogPage()),
+            GoRoute(path: '/a-propos', builder: (context, state) => AboutPage()),
           ],
         ),
       ],
@@ -94,7 +101,15 @@ class RejistraApp extends StatelessWidget {
         final isLoggingIn = state.matchedLocation == '/login' || state.matchedLocation == '/loading';
 
         if (!isLoggedIn && !isLoggingIn) return '/login';
-        if (isLoggedIn && isLoggingIn) return '/';
+
+        if (isLoggedIn && isLoggingIn) {
+          // Logique de redirection post-connexion
+          final userRole = authProvider.currentUser?.role;
+          if(userRole == 'accueil') {
+            return '/inscription'; // Accueil va vers l'inscription
+          }
+          return '/'; // Les autres vont au Dashboard
+        }
 
         return null;
       },

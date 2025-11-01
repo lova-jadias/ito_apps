@@ -1,10 +1,14 @@
+// rejistra/lib/screens/inscription/inscription_page.dart
+// ignore_for_file: use_build_context_synchronously, prefer_const_constructors
+
+import 'dart:math'; // Pour générer le mot de passe
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:rejistra/providers/data_provider.dart';
+import 'package:rejistra/utils/helpers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// Assurez-vous d'importer votre modèle depuis le package partagé
-import 'package:shared/models/etudiant.dart';
+import 'package:rejistra/services/admin_service.dart';
 
 class InscriptionPage extends StatefulWidget {
   const InscriptionPage({Key? key}) : super(key: key);
@@ -27,11 +31,12 @@ class _InscriptionPageState extends State<InscriptionPage> {
   String? _selectedNiveau;
   String? _selectedGroupe;
   String? _selectedDepartement;
+  bool _gojikaActive = false; // Interrupteur d'activation
 
-  // Champs non modifiables (Source: 304)
+  // Champs non modifiables
   final String _paymentDate =
   DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
-  final String _statut = "Actif"; // (Source: 289)
+  final String _statut = "Actif";
 
   @override
   void dispose() {
@@ -42,86 +47,107 @@ class _InscriptionPageState extends State<InscriptionPage> {
     super.dispose();
   }
 
-  // Fonction d'inscription (connectée à Supabase)
-  Future<void> _inscrire() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
+  // Génère un mot de passe simple
+  String _generateTempPassword() {
+    final random = Random.secure();
+    String a = random.nextInt(999999).toString().padLeft(6, '0');
+    String prefix = _prenomController.text.trim().toLowerCase().replaceAll(' ', '');
+    if (prefix.isEmpty) {
+      prefix = "gojika";
     }
+    return "$prefix-$a";
+  }
+
+// Nouvelle version avec Edge Function
+  Future<void> _inscrire() async {
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() { _isLoading = true; });
 
+    final String tempPassword = _generateTempPassword();
+
+    final studentData = {
+      'nom': _nomController.text.trim(),
+      'prenom': _prenomController.text.trim(),
+      'date_naissance': _dateNaissance?.toIso8601String(),
+      'email_contact': _emailController.text.trim(),
+      'telephone': _telController.text.trim(),
+      'mention_module': _selectedMention,
+      'niveau': _selectedNiveau,
+      'groupe': _selectedGroupe,
+      'departement': _selectedDepartement,
+    };
+
     try {
-      // 1. Créer l'objet Etudiant à partir du formulaire
-      // (Nous n'utilisons pas le constructeur complet, seulement la map pour l'insertion)
-      final etudiantData = {
-        'nom': _nomController.text.trim(),
-        'prenom': _prenomController.text.trim(),
-        'date_naissance': _dateNaissance?.toIso8601String(),
-        'email_contact': _emailController.text.trim(),
-        'telephone': _telController.text.trim(),
-        'mention_module': _selectedMention,
-        'niveau': _selectedNiveau,
-        'groupe': _selectedGroupe,
-        'departement': _selectedDepartement,
-        // 'site' est géré par le trigger (Source: 1081)
-        // 'id_etudiant_genere' est géré par le trigger (Source: 1081)
-        // 'statut' a une valeur par défaut dans la DB (Source: 1053)
-      };
-
-      // 2. Insérer dans Supabase (Source: 1240)
-      final response = await Supabase.instance.client
-          .from('etudiants')
-          .insert(etudiantData)
-          .select() // Demande à Supabase de retourner la ligne insérée
-          .single(); // S'assure qu'une seule ligne est retournée
-
-      // 3. Gérer le succès
-      final newIdGenere = response['id_etudiant_genere'];
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Étudiant ${_nomController.text} inscrit (ID: $newIdGenere)'),
-          backgroundColor: Colors.green,
-        ),
+      // Appeler l'Edge Function via le service
+      final result = await AdminService().createStudent(
+        studentData: studentData,
+        tempPassword: tempPassword,
+        activateGojika: _gojikaActive,
       );
 
-      // 4. Réinitialiser le formulaire
-      _formKey.currentState?.reset();
-      _nomController.clear();
-      _prenomController.clear();
-      _emailController.clear();
-      _telController.clear();
-      setState(() {
-        _dateNaissance = null;
-        _selectedMention = null;
-        _selectedNiveau = null;
-        _selectedGroupe = null;
-        _selectedDepartement = null;
-      });
+      final String generatedId = result['id_etudiant_genere'];
 
-    } on PostgrestException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Erreur d'inscription: ${e.message}"),
-          backgroundColor: Colors.red,
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: Text("✅ Succès ! Compte Étudiant Créé"),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text("L'étudiant a été inscrit avec succès.\n"),
+              Text("ID Étudiant:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(generatedId),
+              SizedBox(height: 16),
+              Text("Mot de passe GOJIKA:", style: TextStyle(fontWeight: FontWeight.bold)),
+              SelectableText(tempPassword, style: TextStyle(fontSize: 18, color: Colors.blue)),
+              SizedBox(height: 16),
+              Text(
+                "⚠️ ATTENTION : Veuillez copier et remettre ce mot de passe à l'étudiant. Il ne sera plus jamais affiché.",
+                style: TextStyle(color: Colors.red.shade700),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                _resetForm();
+              },
+              child: Text("Terminé"),
+            ),
+          ],
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("Une erreur inattendue est survenue: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
+      showErrorSnackBar(context, "Erreur d'inscription: $e");
     }
 
     setState(() { _isLoading = false; });
   }
 
+  void _resetForm() {
+    _formKey.currentState?.reset();
+    _nomController.clear();
+    _prenomController.clear();
+    _emailController.clear();
+    _telController.clear();
+    setState(() {
+      _dateNaissance = null;
+      _selectedMention = null;
+      _selectedNiveau = null;
+      _selectedGroupe = null;
+      _selectedDepartement = null;
+      _gojikaActive = false;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Récupère le provider de config
     final dataProvider = Provider.of<DataProvider>(context);
+    final config = dataProvider.configOptions;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -135,7 +161,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
         child: Container(
           constraints: BoxConstraints(maxWidth: 900),
           padding: EdgeInsets.all(24),
-          // SingleChildScrollView pour éviter les overflows sur petits écrans
           child: SingleChildScrollView(
             child: Form(
               key: _formKey,
@@ -145,15 +170,10 @@ class _InscriptionPageState extends State<InscriptionPage> {
                   Text("Formulaire d'inscription",
                       style: Theme.of(context).textTheme.headlineSmall),
                   Text(
-                      "Remplissez les champs pour enregistrer un étudiant."),
+                      "Remplissez les champs pour enregistrer un étudiant et créer son compte GOJIKA."),
                   SizedBox(height: 24),
-
-                  // Champs de statut (non modifiables) (Source: 304)
                   _buildReadOnlyInfoSection(),
                   SizedBox(height: 16),
-
-                  // Formulaire
-                  // Wrap permet aux champs de passer à la ligne sur mobile
                   Wrap(
                     spacing: 16,
                     runSpacing: 16,
@@ -164,18 +184,27 @@ class _InscriptionPageState extends State<InscriptionPage> {
                       _buildDateField(context, "Date de Naissance"),
 
                       // Champs de contact
-                      _buildTextField("Email de contact", _emailController, isRequired: false, keyboardType: TextInputType.emailAddress),
+                      _buildTextField("Email de contact (pour GOJIKA) *", _emailController, keyboardType: TextInputType.emailAddress),
                       _buildTextField("Téléphone", _telController, isRequired: false, keyboardType: TextInputType.phone),
 
-                      // Champs académiques (chargés depuis le provider)
-                      _buildDropdown("Mention/Module *", dataProvider.configOptions['MentionModule'], (val) => setState(() => _selectedMention = val)),
-                      _buildDropdown("Niveau *", dataProvider.configOptions['Niveau'], (val) => setState(() => _selectedNiveau = val)),
-                      _buildDropdown("Groupe *", dataProvider.configOptions['Groupe'], (val) => setState(() => _selectedGroupe = val)),
-                      _buildDropdown("Département *", dataProvider.configOptions['Département'], (val) => setState(() => _selectedDepartement = val)),
+                      // Champs académiques
+                      _buildDropdown("Mention/Module *", config['MentionModule'], (val) => setState(() => _selectedMention = val)),
+                      _buildDropdown("Niveau *", config['Niveau'], (val) => setState(() => _selectedNiveau = val)),
+                      _buildDropdown("Groupe *", config['Groupe'], (val) => setState(() => _selectedGroupe = val)),
+                      _buildDropdown("Département *", config['Département'], (val) => setState(() => _selectedDepartement = val)),
                     ],
                   ),
-                  SizedBox(height: 32),
+                  SizedBox(height: 24),
 
+                  // Interrupteur d'activation
+                  SwitchListTile(
+                    title: Text("Activer le compte GOJIKA immédiatement ?"),
+                    subtitle: Text("L'étudiant pourra se connecter dès maintenant avec le mot de passe temporaire."),
+                    value: _gojikaActive,
+                    onChanged: (val) => setState(() => _gojikaActive = val),
+                  ),
+
+                  SizedBox(height: 32),
                   _isLoading
                       ? Center(child: CircularProgressIndicator())
                       : ElevatedButton.icon(
@@ -184,7 +213,8 @@ class _InscriptionPageState extends State<InscriptionPage> {
                     label: Text('Enregistrer l\'étudiant'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
-                      foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                      foregroundColor:
+                      Theme.of(context).colorScheme.onPrimary,
                     ),
                   ),
                 ],
@@ -196,21 +226,20 @@ class _InscriptionPageState extends State<InscriptionPage> {
     );
   }
 
-  // --- Widgets Helpers (basés sur le prototype) ---
+  // --- Widgets Helpers ---
 
   Widget _buildReadOnlyInfoSection() {
     return Wrap(
       spacing: 16,
       runSpacing: 16,
       children: [
-        // L'ID est maintenant généré par la DB (Source: 1081)
-        _ReadOnlyField(
+        ReadOnlyField(
             label: "ID Étudiant",
             value: "Généré à la validation",
             icon: Icons.vpn_key),
-        _ReadOnlyField(
+        ReadOnlyField(
             label: "Date Opération", value: _paymentDate, icon: Icons.today),
-        _ReadOnlyField(
+        ReadOnlyField(
             label: "Statut Initial",
             value: _statut,
             icon: Icons.check_circle_outline,
@@ -224,7 +253,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
       constraints: BoxConstraints(minWidth: 280),
       child: DropdownButtonFormField<String>(
         decoration: InputDecoration(labelText: label),
-        // Si items est null (chargement), on affiche une liste vide
         items: (items ?? [])
             .map((item) => DropdownMenuItem(value: item, child: Text(item)))
             .toList(),
@@ -241,9 +269,15 @@ class _InscriptionPageState extends State<InscriptionPage> {
         controller: controller,
         decoration: InputDecoration(labelText: label),
         keyboardType: keyboardType,
-        validator: (value) => (isRequired && (value == null || value.isEmpty))
-            ? 'Champ requis'
-            : null,
+        validator: (value) {
+          if (isRequired && (value == null || value.isEmpty)) {
+            return 'Champ requis';
+          }
+          if (keyboardType == TextInputType.emailAddress && value!.isNotEmpty && !value.contains('@')) {
+            return 'Email invalide';
+          }
+          return null;
+        },
       ),
     );
   }
@@ -272,48 +306,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
                 : DateFormat('dd/MM/yyyy').format(_dateNaissance!),
           ),
         ),
-      ),
-    );
-  }
-}
-
-// Widget pour les champs non modifiables (Source: 311-315)
-// (Copiez-collez ce widget au bas de votre fichier inscription_page.dart)
-class _ReadOnlyField extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color? color;
-
-  const _ReadOnlyField(
-      {required this.label,
-        required this.value,
-        required this.icon,
-        this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-          color: Colors.grey.shade100,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color ?? Colors.grey.shade700, size: 20),
-          SizedBox(width: 10),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(label, style: Theme.of(context).textTheme.bodySmall),
-              Text(value,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: color, fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ],
       ),
     );
   }
