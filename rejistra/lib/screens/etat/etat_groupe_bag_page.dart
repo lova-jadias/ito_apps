@@ -22,19 +22,21 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
   bool _isLoading = false;
   List<DataColumn> _bagColumns = [];
   List<DataRow> _bagRows = [];
+  Map<String, int> _groupStats = {};
 
   Future<void> _generateReport() async {
     if (_selectedSite == null || _selectedGroupe == null) {
-      showErrorSnackBar(context, "Veuillez sélectionner un Site ET un Groupe.");
+      showErrorSnackBar(
+          context, "Veuillez sélectionner un Site ET un Groupe.");
       return;
     }
 
     setState(() => _isLoading = true);
     _bagColumns = [];
     _bagRows = [];
+    _groupStats = {};
 
     try {
-      // Appel de la fonction RPC
       final List<dynamic> result = await Supabase.instance.client.rpc(
         'get_bag_report',
         params: {
@@ -44,43 +46,77 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
       );
 
       if (result.isEmpty) {
-        showSuccessSnackBar(context, "Aucun étudiant trouvé pour cette sélection.");
+        showSuccessSnackBar(
+            context, "Aucun étudiant trouvé pour cette sélection.");
         setState(() => _isLoading = false);
         return;
       }
 
-      // Construire les colonnes dynamiquement à partir du premier résultat
+      int effectifBrut = result.length;
+      int actifs = 0;
+      int abandons = 0;
+      int accords = 0;
+
+      for (var row in result) {
+        final statut = row['statut'] as String?;
+        if (statut == 'Actif') actifs++;
+        if (statut == 'Abandon') abandons++;
+        if (statut == 'Accord Spécial') accords++;
+      }
+
+      _groupStats = {
+        'effectif_brut': effectifBrut,
+        'actifs': actifs,
+        'abandons': abandons,
+        'accords': accords,
+      };
+
       final firstRow = result.first as Map<String, dynamic>;
       _bagColumns = firstRow.keys.map((key) {
         return DataColumn2(
-          label: Text(key.replaceAll('_', ' ')),
-          size: (key == 'nom' || key == 'prenom') ? ColumnSize.L : ColumnSize.S,
-          numeric: false,
+          label: Text(key == 'row_num' ? 'Nº' : key.replaceAll('_', ' '),
+              style: TextStyle(fontWeight: FontWeight.bold)),
+          size: (key == 'nom' || key == 'prenom')
+              ? ColumnSize.L
+              : (key == 'row_num'
+              ? ColumnSize.S
+              : ColumnSize.M),
+          numeric: key == 'row_num',
         );
       }).toList();
 
-      // Construire les lignes
       _bagRows = result.map((row) {
         return DataRow(
           cells: row.entries.map<DataCell>((cell) {
             final value = cell.value?.toString() ?? '-';
             final isStatus = cell.key == 'statut';
-            final isRecu = value != '-' && !isStatus && cell.key != 'id' && cell.key != 'nom' && cell.key != 'prenom';
+            final isRecu = value != '-' &&
+                !isStatus &&
+                cell.key != 'id' &&
+                cell.key != 'row_num' &&
+                cell.key != 'id_etudiant_genere' &&
+                cell.key != 'nom' &&
+                cell.key != 'prenom';
 
             Color? color = isStatus
-                ? (value == 'Abandon' ? Colors.red : (value == 'Accord Spécial' ? Colors.orange : Colors.green))
+                ? (value == 'Abandon'
+                ? Colors.red
+                : (value == 'Accord Spécial'
+                ? Colors.orange
+                : Colors.green))
                 : (isRecu ? Colors.blue.shade800 : null);
 
             return DataCell(
-                Text(
-                  value,
-                  style: TextStyle(color: color, fontWeight: isStatus ? FontWeight.bold : null),
-                )
+              Text(
+                value,
+                style: TextStyle(
+                    color: color,
+                    fontWeight: isStatus ? FontWeight.bold : null),
+              ),
             );
           }).toList(),
         );
       }).toList();
-
     } catch (e) {
       showErrorSnackBar(context, "Erreur RPC: $e");
     }
@@ -92,7 +128,9 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
   Widget build(BuildContext context) {
     final config = context.watch<DataProvider>().configOptions;
     final user = context.watch<AuthProvider>().currentUser;
-    final isFullAccess = user?.role == 'admin' || user?.role == 'controleur' || user?.site == 'FULL';
+    final isFullAccess = user?.role == 'admin' ||
+        user?.role == 'controleur' ||
+        user?.site == 'FULL';
 
     if (!isFullAccess && _selectedSite == null) {
       _selectedSite = user?.site;
@@ -121,6 +159,7 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
       body: Column(
         children: [
           _buildFilterBar(config, isFullAccess),
+          if (_groupStats.isNotEmpty) _buildStatsBar(),
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator())
@@ -133,7 +172,7 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
                 child: DataTable2(
                   columnSpacing: 12,
                   horizontalMargin: 12,
-                  minWidth: 1200,
+                  minWidth: 1400,
                   columns: _bagColumns,
                   rows: _bagRows,
                 ),
@@ -159,9 +198,12 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
               decoration: InputDecoration(labelText: 'Site *'),
               value: _selectedSite,
               items: (config['Site'] ?? [])
-                  .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                  .map((item) =>
+                  DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
-              onChanged: isFullAccess ? (val) => setState(() => _selectedSite = val) : null,
+              onChanged: isFullAccess
+                  ? (val) => setState(() => _selectedSite = val)
+                  : null,
             ),
           ),
           SizedBox(
@@ -170,7 +212,8 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
               decoration: InputDecoration(labelText: 'Groupe *'),
               value: _selectedGroupe,
               items: (config['Groupe'] ?? [])
-                  .map((item) => DropdownMenuItem(value: item, child: Text(item)))
+                  .map((item) =>
+                  DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
               onChanged: (val) => setState(() => _selectedGroupe = val),
             ),
@@ -182,6 +225,80 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildStatsBar() {
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        border: Border(
+          top: BorderSide(color: Colors.blue.shade200),
+          bottom: BorderSide(color: Colors.blue.shade200),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _StatChip(
+              label: 'Site',
+              value: _selectedSite ?? 'N/A',
+              color: Colors.blue),
+          _StatChip(
+              label: 'Groupe',
+              value: _selectedGroupe ?? 'N/A',
+              color: Colors.purple),
+          _StatChip(
+              label: 'Effectif Brut',
+              value: '${_groupStats['effectif_brut']}',
+              color: Colors.teal),
+          _StatChip(
+              label: 'Actifs',
+              value: '${_groupStats['actifs']}',
+              color: Colors.green),
+          _StatChip(
+              label: 'Accord Spécial',
+              value: '${_groupStats['accords']}',
+              color: Colors.orange),
+          _StatChip(
+              label: 'Abandons',
+              value: '${_groupStats['abandons']}',
+              color: Colors.red),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatChip extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _StatChip(
+      {required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
+        SizedBox(height: 4),
+        Container(
+          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color, width: 2),
+          ),
+          child: Text(
+            value,
+            style: TextStyle(
+                fontSize: 16, fontWeight: FontWeight.bold, color: color),
+          ),
+        ),
+      ],
     );
   }
 }

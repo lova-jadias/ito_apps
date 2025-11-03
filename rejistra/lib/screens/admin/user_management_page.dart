@@ -19,13 +19,20 @@ class UserManagementPage extends StatefulWidget {
 class _UserManagementPageState extends State<UserManagementPage> {
   final _client = Supabase.instance.client;
   Stream<List<Map<String, dynamic>>>? _profilesStream;
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
+    _initStream();
+  }
+
+  void _initStream() {
     _profilesStream = _client
         .from('profiles')
         .stream(primaryKey: ['id'])
+        .neq('role', 'etudiant')
         .order('created_at', ascending: false)
         .map((data) => data);
   }
@@ -42,16 +49,20 @@ class _UserManagementPageState extends State<UserManagementPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text('Supprimer l\'utilisateur ?'),
-        content: Text('Voulez-vous vraiment supprimer définitivement $userName ? Cette action est irréversible.'),
+        content: Text(
+            'Voulez-vous vraiment supprimer définitivement $userName ? Cette action est irréversible.'),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: Text('Annuler')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text('Annuler')),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
             child: Text('Supprimer', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
-    ) ?? false;
+    ) ??
+        false;
 
     if (didConfirm) {
       try {
@@ -77,10 +88,40 @@ class _UserManagementPageState extends State<UserManagementPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ElevatedButton.icon(
-              onPressed: _showAddUserDialog,
-              icon: Icon(Icons.add),
-              label: Text('Créer un nouvel utilisateur'),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      labelText: 'Rechercher un utilisateur (nom, email)',
+                      prefixIcon: Icon(Icons.search),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                        icon: Icon(Icons.clear),
+                        onPressed: () {
+                          setState(() {
+                            _searchController.clear();
+                            _searchQuery = '';
+                          });
+                        },
+                      )
+                          : null,
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value.toLowerCase();
+                      });
+                    },
+                  ),
+                ),
+                SizedBox(width: 16),
+                ElevatedButton.icon(
+                  onPressed: _showAddUserDialog,
+                  icon: Icon(Icons.add),
+                  label: Text('Créer un utilisateur'),
+                ),
+              ],
             ),
             SizedBox(height: 16),
             Expanded(
@@ -95,19 +136,34 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     if (snapshot.hasError) {
                       return Center(child: Text("Erreur: ${snapshot.error}"));
                     }
-                    final profiles = snapshot.data ?? [];
+                    final allProfiles = snapshot.data ?? [];
+
+                    final filteredProfiles = _searchQuery.isEmpty
+                        ? allProfiles
+                        : allProfiles.where((profile) {
+                      final nom = (profile['nom_complet'] ?? '').toLowerCase();
+                      final email = (profile['email'] ?? '').toLowerCase();
+                      return nom.contains(_searchQuery) ||
+                          email.contains(_searchQuery);
+                    }).toList();
+
+                    if (filteredProfiles.isEmpty) {
+                      return Center(child: Text('Aucun utilisateur trouvé.'));
+                    }
+
                     return DataTable2(
                       columnSpacing: 12,
                       horizontalMargin: 12,
                       minWidth: 700,
                       columns: const [
-                        DataColumn2(label: Text('Nom Complet'), size: ColumnSize.L),
+                        DataColumn2(
+                            label: Text('Nom Complet'), size: ColumnSize.L),
                         DataColumn2(label: Text('Email'), size: ColumnSize.L),
                         DataColumn2(label: Text('Rôle'), size: ColumnSize.M),
                         DataColumn2(label: Text('Site'), size: ColumnSize.S),
                         DataColumn2(label: Text('Actions'), size: ColumnSize.S),
                       ],
-                      rows: profiles.map((profile) {
+                      rows: filteredProfiles.map((profile) {
                         return DataRow(cells: [
                           DataCell(Text(profile['nom_complet'] ?? 'N/A')),
                           DataCell(Text(profile['email'] ?? 'N/A')),
@@ -116,16 +172,21 @@ class _UserManagementPageState extends State<UserManagementPage> {
                           DataCell(Row(
                             children: [
                               IconButton(
-                                icon: Icon(Icons.edit_outlined, color: Colors.blue, size: 20),
+                                icon: Icon(Icons.edit_outlined,
+                                    color: Colors.blue, size: 20),
                                 tooltip: "Modifier (non implémenté)",
                                 onPressed: () {
-                                  showErrorSnackBar(context, "La modification sera bientôt disponible.");
+                                  showErrorSnackBar(context,
+                                      "La modification sera bientôt disponible.");
                                 },
                               ),
                               IconButton(
-                                icon: Icon(Icons.delete_outline, color: Colors.red, size: 20),
+                                icon: Icon(Icons.delete_outline,
+                                    color: Colors.red, size: 20),
                                 tooltip: "Supprimer",
-                                onPressed: () => _deleteUser(profile['id'], profile['nom_complet'] ?? 'Utilisateur'),
+                                onPressed: () => _deleteUser(
+                                    profile['id'],
+                                    profile['nom_complet'] ?? 'Utilisateur'),
                               ),
                             ],
                           )),
@@ -143,7 +204,6 @@ class _UserManagementPageState extends State<UserManagementPage> {
   }
 }
 
-// Dialogue d'ajout d'utilisateur (corrigé pour appeler la RPC)
 class _AddUserDialog extends StatefulWidget {
   const _AddUserDialog({Key? key}) : super(key: key);
   @override
@@ -159,15 +219,19 @@ class _AddUserDialogState extends State<_AddUserDialog> {
   String? _selectedSite;
   bool _isLoading = false;
 
-  // Rôles du personnel (on ne crée pas d'étudiants ici)
-  final List<String> _roles = ['accueil', 'responsable', 'controleur', 'rp', 'enseignant'];
+  final List<String> _roles = [
+    'accueil',
+    'responsable',
+    'controleur',
+    'rp',
+    'enseignant'
+  ];
 
   Future<void> _createUser() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
 
     try {
-      // ✅ UTILISER AdminService (Edge Function)
       await AdminService().createStaff(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
@@ -209,25 +273,34 @@ class _AddUserDialogState extends State<_AddUserDialog> {
                 controller: _emailController,
                 decoration: InputDecoration(labelText: 'Email *'),
                 keyboardType: TextInputType.emailAddress,
-                validator: (val) => (val!.isEmpty || !val.contains('@')) ? 'Email invalide' : null,
+                validator: (val) => (val!.isEmpty || !val.contains('@'))
+                    ? 'Email invalide'
+                    : null,
               ),
               SizedBox(height: 12),
               TextFormField(
                 controller: _passwordController,
-                decoration: InputDecoration(labelText: 'Mot de passe provisoire *'),
-                validator: (val) => (val!.isEmpty || val.length < 6) ? 'Min 6 caractères' : null,
+                decoration:
+                InputDecoration(labelText: 'Mot de passe provisoire *'),
+                validator: (val) => (val!.isEmpty || val.length < 6)
+                    ? 'Min 6 caractères'
+                    : null,
               ),
               SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(labelText: 'Rôle *'),
-                items: _roles.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                items: _roles
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedRole = val),
                 validator: (val) => val == null ? 'Requis' : null,
               ),
               SizedBox(height: 12),
               DropdownButtonFormField<String>(
                 decoration: InputDecoration(labelText: 'Site Rattaché *'),
-                items: sites.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                items: sites
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
                 onChanged: (val) => setState(() => _selectedSite = val),
                 validator: (val) => val == null ? 'Requis' : null,
               ),
@@ -242,7 +315,9 @@ class _AddUserDialogState extends State<_AddUserDialog> {
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _createUser,
-          child: _isLoading ? CircularProgressIndicator(strokeWidth: 2) : Text('Créer'),
+          child: _isLoading
+              ? CircularProgressIndicator(strokeWidth: 2)
+              : Text('Créer'),
         ),
       ],
     );

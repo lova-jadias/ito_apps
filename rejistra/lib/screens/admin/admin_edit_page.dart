@@ -29,19 +29,15 @@ class _AdminEditPageState extends State<AdminEditPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Section 1: Gérer les Paiements
             Text("Modifier/Annuler un Paiement",
                 style: Theme.of(context).textTheme.headlineSmall),
             SizedBox(height: 16),
-            SearchModifyPaymentWidget(), // Nouveau widget
-
+            SearchModifyPaymentWidget(),
             Divider(height: 48),
-
-            // Section 2: Gérer les Configurations
             Text("Ajouter/Gérer les Configurations",
                 style: Theme.of(context).textTheme.headlineSmall),
             SizedBox(height: 16),
-            ConfigManagementWidget(), // Ancien widget
+            ConfigManagementWidget(),
           ],
         ),
       ),
@@ -49,13 +45,11 @@ class _AdminEditPageState extends State<AdminEditPage> {
   }
 }
 
-// ===============================================
-// WIDGET DE GESTION DES CONFIGURATIONS (existant)
-// ===============================================
 class ConfigManagementWidget extends StatefulWidget {
   const ConfigManagementWidget({Key? key}) : super(key: key);
   @override
-  State<ConfigManagementWidget> createState() => _ConfigManagementWidgetState();
+  State<ConfigManagementWidget> createState() =>
+      _ConfigManagementWidgetState();
 }
 
 class _ConfigManagementWidgetState extends State<ConfigManagementWidget> {
@@ -66,7 +60,8 @@ class _ConfigManagementWidgetState extends State<ConfigManagementWidget> {
 
   Future<void> _addConfig() async {
     if (_selectedCategory == null || _newValueController.text.isEmpty) {
-      showErrorSnackBar(context, "Veuillez sélectionner une catégorie et saisir une valeur.");
+      showErrorSnackBar(context,
+          "Veuillez sélectionner une catégorie et saisir une valeur.");
       return;
     }
     setState(() => _isSaving = true);
@@ -120,15 +115,20 @@ class _ConfigManagementWidgetState extends State<ConfigManagementWidget> {
                   width: 250,
                   child: DropdownButtonFormField<String>(
                     decoration: InputDecoration(labelText: 'Catégorie'),
-                    items: categories.map((k) => DropdownMenuItem(value: k, child: Text(k))).toList(),
-                    onChanged: (val) => setState(() => _selectedCategory = val),
+                    items: categories
+                        .map((k) =>
+                        DropdownMenuItem(value: k, child: Text(k)))
+                        .toList(),
+                    onChanged: (val) =>
+                        setState(() => _selectedCategory = val),
                   ),
                 ),
                 SizedBox(
                   width: 300,
                   child: TextField(
                     controller: _newValueController,
-                    decoration: InputDecoration(labelText: 'Nouvelle valeur (ex: GL4)'),
+                    decoration: InputDecoration(
+                        labelText: 'Nouvelle valeur (ex: GL4)'),
                   ),
                 ),
                 _isSaving
@@ -148,7 +148,8 @@ class _ConfigManagementWidgetState extends State<ConfigManagementWidget> {
               value: category,
               headerBuilder: (BuildContext context, bool isExpanded) {
                 return ListTile(
-                  title: Text(category, style: TextStyle(fontWeight: FontWeight.bold)),
+                  title: Text(category,
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 );
               },
               body: Padding(
@@ -173,16 +174,15 @@ class _ConfigManagementWidgetState extends State<ConfigManagementWidget> {
   }
 }
 
-// ===============================================
-// NOUVEAU WIDGET DE GESTION DES PAIEMENTS
-// ===============================================
 class SearchModifyPaymentWidget extends StatefulWidget {
   const SearchModifyPaymentWidget({Key? key}) : super(key: key);
   @override
-  State<SearchModifyPaymentWidget> createState() => _SearchModifyPaymentWidgetState();
+  State<SearchModifyPaymentWidget> createState() =>
+      _SearchModifyPaymentWidgetState();
 }
 
-class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
+class _SearchModifyPaymentWidgetState
+    extends State<SearchModifyPaymentWidget> {
   final _searchController = TextEditingController();
   List<Map<String, dynamic>> _searchResults = [];
   bool _isLoading = false;
@@ -195,10 +195,12 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
     try {
       final results = await Supabase.instance.client
           .from('paiement_items')
-          .select('*, etudiants(nom, prenom), recus(n_recu_principal, ref_transaction)')
-          .or('recus.n_recu_principal.ilike.%$query%,etudiants.nom.ilike.%$query%,etudiants.prenom.ilike.%$query%')
+          .select(
+          '*, etudiants(nom, prenom), recus(n_recu_principal, ref_transaction)')
+          .or(
+          'recus.n_recu_principal.ilike.*$query*,etudiants.nom.ilike.*$query*,etudiants.prenom.ilike.*$query*')
           .limit(10);
-      setState(() => _searchResults = results);
+      setState(() => _searchResults = List<Map<String, dynamic>>.from(results));
     } catch (e) {
       showErrorSnackBar(context, "Erreur: $e");
     }
@@ -210,7 +212,7 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
       context: context,
       builder: (context) => _EditPaymentDialog(
         paymentItem: paymentItem,
-        onSaved: _search, // Rafraîchir la recherche après sauvegarde
+        onSaved: _search,
       ),
     );
   }
@@ -224,16 +226,20 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Voulez-vous annuler ce paiement ?\nMotif: ${paymentItem['motif']}\nMontant: ${paymentItem['montant']} Ar'),
+            Text(
+                'Voulez-vous annuler ce paiement ?\nMotif: ${paymentItem['motif']}\nMontant: ${paymentItem['montant']} Ar'),
             SizedBox(height: 16),
             TextField(
               controller: reasonController,
-              decoration: InputDecoration(labelText: 'Raison de l\'annulation *'),
+              decoration:
+              InputDecoration(labelText: 'Raison de l\'annulation *'),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: Text('Fermer')),
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Fermer')),
           TextButton(
             onPressed: () async {
               if (reasonController.text.isEmpty) {
@@ -241,18 +247,20 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
                 return;
               }
               try {
-                await Supabase.instance.client.rpc('cancel_payment', params: {
+                await Supabase.instance.client
+                    .rpc('cancel_payment', params: {
                   'p_item_id': paymentItem['id'],
                   'reason': reasonController.text,
                 });
                 Navigator.of(context).pop();
                 showSuccessSnackBar(context, "Paiement annulé.");
-                _search(); // Rafraîchir
+                _search();
               } catch (e) {
                 showErrorSnackBar(context, "Erreur RPC: $e");
               }
             },
-            child: Text('Confirmer l\'Annulation', style: TextStyle(color: Colors.red)),
+            child: Text('Confirmer l\'Annulation',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -284,8 +292,10 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
               final student = item['etudiants'];
               final recu = item['recus'];
               return ListTile(
-                title: Text('${student['nom'] ?? ''} ${student['prenom'] ?? ''} - ${item['motif']}'),
-                subtitle: Text('Reçu: ${recu['n_recu_principal']} | Montant: ${item['montant']} Ar'),
+                title: Text(
+                    '${student?['nom'] ?? 'N/A'} ${student?['prenom'] ?? ''} - ${item['motif']}'),
+                subtitle: Text(
+                    'Reçu: ${recu?['n_recu_principal'] ?? 'N/A'} | Montant: ${item['montant']} Ar'),
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -310,12 +320,13 @@ class _SearchModifyPaymentWidgetState extends State<SearchModifyPaymentWidget> {
   }
 }
 
-// Dialogue d'édition de paiement
 class _EditPaymentDialog extends StatefulWidget {
   final Map<String, dynamic> paymentItem;
   final VoidCallback onSaved;
 
-  const _EditPaymentDialog({Key? key, required this.paymentItem, required this.onSaved}) : super(key: key);
+  const _EditPaymentDialog(
+      {Key? key, required this.paymentItem, required this.onSaved})
+      : super(key: key);
   @override
   State<_EditPaymentDialog> createState() => _EditPaymentDialogState();
 }
@@ -330,8 +341,10 @@ class _EditPaymentDialogState extends State<_EditPaymentDialog> {
   void initState() {
     super.initState();
     _motifController = TextEditingController(text: widget.paymentItem['motif']);
-    _recuController = TextEditingController(text: widget.paymentItem['recus']['n_recu_principal']);
-    _refController = TextEditingController(text: widget.paymentItem['recus']['ref_transaction']);
+    _recuController = TextEditingController(
+        text: widget.paymentItem['recus']?['n_recu_principal'] ?? '');
+    _refController = TextEditingController(
+        text: widget.paymentItem['recus']?['ref_transaction'] ?? '');
   }
 
   Future<void> _save() async {
@@ -372,16 +385,21 @@ class _EditPaymentDialogState extends State<_EditPaymentDialog> {
             SizedBox(height: 12),
             TextField(
               controller: _refController,
-              decoration: InputDecoration(labelText: 'Référence de Paiement'),
+              decoration:
+              InputDecoration(labelText: 'Référence de Paiement'),
             ),
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: Text('Annuler')),
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Annuler')),
         ElevatedButton(
           onPressed: _isSaving ? null : _save,
-          child: _isSaving ? CircularProgressIndicator(strokeWidth: 2) : Text('Enregistrer'),
+          child: _isSaving
+              ? CircularProgressIndicator(strokeWidth: 2)
+              : Text('Enregistrer'),
         ),
       ],
     );

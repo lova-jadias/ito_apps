@@ -1,14 +1,14 @@
 // rejistra/lib/screens/inscription/inscription_page.dart
 // ignore_for_file: use_build_context_synchronously, prefer_const_constructors
 
-import 'dart:math'; // Pour générer le mot de passe
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import 'package:rejistra/providers/data_provider.dart';
 import 'package:rejistra/utils/helpers.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:rejistra/services/admin_service.dart';
+import 'package:rejistra/widgets/photo_uploader.dart';
 
 class InscriptionPage extends StatefulWidget {
   const InscriptionPage({Key? key}) : super(key: key);
@@ -21,7 +21,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
 
-  // Contrôleurs pour les champs
   final _nomController = TextEditingController();
   final _prenomController = TextEditingController();
   final _emailController = TextEditingController();
@@ -31,11 +30,10 @@ class _InscriptionPageState extends State<InscriptionPage> {
   String? _selectedNiveau;
   String? _selectedGroupe;
   String? _selectedDepartement;
-  bool _gojikaActive = false; // Interrupteur d'activation
+  String? _photoUrl;
+  bool _gojikaActive = false;
 
-  // Champs non modifiables
-  final String _paymentDate =
-  DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
+  final String _paymentDate = DateFormat('dd/MM/yyyy HH:mm').format(DateTime.now());
   final String _statut = "Actif";
 
   @override
@@ -47,7 +45,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
     super.dispose();
   }
 
-  // Génère un mot de passe simple
   String _generateTempPassword() {
     final random = Random.secure();
     String a = random.nextInt(999999).toString().padLeft(6, '0');
@@ -58,11 +55,12 @@ class _InscriptionPageState extends State<InscriptionPage> {
     return "$prefix-$a";
   }
 
-// Nouvelle version avec Edge Function
   Future<void> _inscrire() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() { _isLoading = true; });
+    setState(() {
+      _isLoading = true;
+    });
 
     final String tempPassword = _generateTempPassword();
 
@@ -76,10 +74,10 @@ class _InscriptionPageState extends State<InscriptionPage> {
       'niveau': _selectedNiveau,
       'groupe': _selectedGroupe,
       'departement': _selectedDepartement,
+      'photo_url': _photoUrl,
     };
 
     try {
-      // Appeler l'Edge Function via le service
       final result = await AdminService().createStudent(
         studentData: studentData,
         tempPassword: tempPassword,
@@ -98,11 +96,14 @@ class _InscriptionPageState extends State<InscriptionPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text("L'étudiant a été inscrit avec succès.\n"),
-              Text("ID Étudiant:", style: TextStyle(fontWeight: FontWeight.bold)),
+              Text("ID Étudiant:",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
               Text(generatedId),
               SizedBox(height: 16),
-              Text("Mot de passe GOJIKA:", style: TextStyle(fontWeight: FontWeight.bold)),
-              SelectableText(tempPassword, style: TextStyle(fontSize: 18, color: Colors.blue)),
+              Text("Mot de passe GOJIKA:",
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              SelectableText(tempPassword,
+                  style: TextStyle(fontSize: 18, color: Colors.blue)),
               SizedBox(height: 16),
               Text(
                 "⚠️ ATTENTION : Veuillez copier et remettre ce mot de passe à l'étudiant. Il ne sera plus jamais affiché.",
@@ -125,7 +126,9 @@ class _InscriptionPageState extends State<InscriptionPage> {
       showErrorSnackBar(context, "Erreur d'inscription: $e");
     }
 
-    setState(() { _isLoading = false; });
+    setState(() {
+      _isLoading = false;
+    });
   }
 
   void _resetForm() {
@@ -140,6 +143,7 @@ class _InscriptionPageState extends State<InscriptionPage> {
       _selectedNiveau = null;
       _selectedGroupe = null;
       _selectedDepartement = null;
+      _photoUrl = null;
       _gojikaActive = false;
     });
   }
@@ -174,36 +178,49 @@ class _InscriptionPageState extends State<InscriptionPage> {
                   SizedBox(height: 24),
                   _buildReadOnlyInfoSection(),
                   SizedBox(height: 16),
+                  Center(
+                    child: PhotoUploader(
+                      initialPhotoUrl: _photoUrl,
+                      onPhotoUploaded: (url) {
+                        setState(() {
+                          _photoUrl = url;
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(height: 16),
                   Wrap(
                     spacing: 16,
                     runSpacing: 16,
                     children: [
-                      // Champs d'identité
                       _buildTextField("Nom *", _nomController),
-                      _buildTextField("Prénom", _prenomController, isRequired: false),
+                      _buildTextField("Prénom", _prenomController,
+                          isRequired: false),
                       _buildDateField(context, "Date de Naissance"),
-
-                      // Champs de contact
-                      _buildTextField("Email de contact (pour GOJIKA) *", _emailController, keyboardType: TextInputType.emailAddress),
-                      _buildTextField("Téléphone", _telController, isRequired: false, keyboardType: TextInputType.phone),
-
-                      // Champs académiques
-                      _buildDropdown("Mention/Module *", config['MentionModule'], (val) => setState(() => _selectedMention = val)),
-                      _buildDropdown("Niveau *", config['Niveau'], (val) => setState(() => _selectedNiveau = val)),
-                      _buildDropdown("Groupe *", config['Groupe'], (val) => setState(() => _selectedGroupe = val)),
-                      _buildDropdown("Département *", config['Département'], (val) => setState(() => _selectedDepartement = val)),
+                      _buildTextField(
+                          "Email de contact (pour GOJIKA) *", _emailController,
+                          keyboardType: TextInputType.emailAddress),
+                      _buildTextField("Téléphone", _telController,
+                          isRequired: false,
+                          keyboardType: TextInputType.phone),
+                      _buildDropdown("Mention/Module *", config['MentionModule'],
+                              (val) => setState(() => _selectedMention = val)),
+                      _buildDropdown("Niveau *", config['Niveau'],
+                              (val) => setState(() => _selectedNiveau = val)),
+                      _buildDropdown("Groupe *", config['Groupe'],
+                              (val) => setState(() => _selectedGroupe = val)),
+                      _buildDropdown("Département *", config['Département'],
+                              (val) => setState(() => _selectedDepartement = val)),
                     ],
                   ),
                   SizedBox(height: 24),
-
-                  // Interrupteur d'activation
                   SwitchListTile(
                     title: Text("Activer le compte GOJIKA immédiatement ?"),
-                    subtitle: Text("L'étudiant pourra se connecter dès maintenant avec le mot de passe temporaire."),
+                    subtitle: Text(
+                        "L'étudiant pourra se connecter dès maintenant avec le mot de passe temporaire."),
                     value: _gojikaActive,
                     onChanged: (val) => setState(() => _gojikaActive = val),
                   ),
-
                   SizedBox(height: 32),
                   _isLoading
                       ? Center(child: CircularProgressIndicator())
@@ -212,7 +229,8 @@ class _InscriptionPageState extends State<InscriptionPage> {
                     icon: Icon(Icons.save),
                     label: Text('Enregistrer l\'étudiant'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.primary,
+                      backgroundColor:
+                      Theme.of(context).colorScheme.primary,
                       foregroundColor:
                       Theme.of(context).colorScheme.onPrimary,
                     ),
@@ -225,8 +243,6 @@ class _InscriptionPageState extends State<InscriptionPage> {
       ),
     );
   }
-
-  // --- Widgets Helpers ---
 
   Widget _buildReadOnlyInfoSection() {
     return Wrap(
@@ -248,7 +264,8 @@ class _InscriptionPageState extends State<InscriptionPage> {
     );
   }
 
-  Widget _buildDropdown(String label, List<String>? items, ValueChanged<String?> onChanged) {
+  Widget _buildDropdown(
+      String label, List<String>? items, ValueChanged<String?> onChanged) {
     return ConstrainedBox(
       constraints: BoxConstraints(minWidth: 280),
       child: DropdownButtonFormField<String>(
@@ -262,7 +279,8 @@ class _InscriptionPageState extends State<InscriptionPage> {
     );
   }
 
-  Widget _buildTextField(String label, TextEditingController controller, {bool isRequired = true, TextInputType? keyboardType}) {
+  Widget _buildTextField(String label, TextEditingController controller,
+      {bool isRequired = true, TextInputType? keyboardType}) {
     return ConstrainedBox(
       constraints: BoxConstraints(minWidth: 280),
       child: TextFormField(
@@ -273,7 +291,9 @@ class _InscriptionPageState extends State<InscriptionPage> {
           if (isRequired && (value == null || value.isEmpty)) {
             return 'Champ requis';
           }
-          if (keyboardType == TextInputType.emailAddress && value!.isNotEmpty && !value.contains('@')) {
+          if (keyboardType == TextInputType.emailAddress &&
+              value!.isNotEmpty &&
+              !value.contains('@')) {
             return 'Email invalide';
           }
           return null;
@@ -294,12 +314,14 @@ class _InscriptionPageState extends State<InscriptionPage> {
             lastDate: DateTime.now().subtract(Duration(days: 365 * 10)),
           );
           if (pickedDate != null) {
-            setState(() { _dateNaissance = pickedDate; });
+            setState(() {
+              _dateNaissance = pickedDate;
+            });
           }
         },
         child: InputDecorator(
-          decoration:
-          InputDecoration(labelText: label, suffixIcon: Icon(Icons.calendar_month)),
+          decoration: InputDecoration(
+              labelText: label, suffixIcon: Icon(Icons.calendar_month)),
           child: Text(
             _dateNaissance == null
                 ? 'Sélectionner une date'

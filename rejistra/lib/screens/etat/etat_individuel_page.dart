@@ -23,7 +23,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
   List<Map<String, dynamic>> _studentPayments = [];
   bool _isLoading = false;
 
-  // Recherche l'étudiant
   Future<void> _searchStudent(Map<String, dynamic> student) async {
     setState(() {
       _isLoading = true;
@@ -32,7 +31,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
     });
 
     try {
-      // Récupérer l'historique financier
       final paymentsRes = await _client
           .from('paiement_items')
           .select('*, recus(n_recu_principal, date_paiement, created_by_user_id)')
@@ -49,7 +47,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
     }
   }
 
-  // Mettre à jour le statut (Admin/Contrôleur)
   Future<void> _updateStudentStatus(String newStatus) async {
     try {
       await _client
@@ -64,7 +61,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
     }
   }
 
-  // Activer le compte GOJIKA (Admin/Contrôleur)
   Future<void> _updateGojikaStatus(bool isActive) async {
     try {
       await _client
@@ -78,7 +74,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
       showErrorSnackBar(context, "Erreur: $e");
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -110,7 +105,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
       ),
       body: Column(
         children: [
-          // Barre de recherche
           Container(
             padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             color: Colors.white,
@@ -123,7 +117,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                 }
                 final response = await _client
                     .from('etudiants')
-                    .select('id, id_etudiant_genere, nom, prenom, groupe, statut, gojika_account_active')
+                    .select('id, id_etudiant_genere, nom, prenom, groupe, statut, gojika_account_active, photo_url')
                     .or(
                     'nom.ilike.%${textEditingValue.text}%,prenom.ilike.%${textEditingValue.text}%,id_etudiant_genere.ilike.%${textEditingValue.text}%')
                     .limit(10);
@@ -143,7 +137,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
               },
             ),
           ),
-          // Contenu
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator())
@@ -165,7 +158,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. Infos Personnelles
           Text("Informations Personnelles",
               style: Theme.of(context).textTheme.headlineSmall),
           SizedBox(height: 16),
@@ -175,30 +167,65 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Wrap(
-                    spacing: 24,
-                    runSpacing: 16,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      ReadOnlyField(label: "Nom", value: "${_selectedStudent!['nom']} ${_selectedStudent!['prenom'] ?? ''}", icon: Icons.person),
-                      ReadOnlyField(label: "ID", value: _selectedStudent!['id_etudiant_genere'], icon: Icons.vpn_key),
-                      ReadOnlyField(label: "Site", value: _selectedStudent!['site'], icon: Icons.apartment),
-                      ReadOnlyField(label: "Groupe", value: _selectedStudent!['groupe'], icon: Icons.group),
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.grey.shade300, width: 2),
+                          image: _selectedStudent!['photo_url'] != null
+                              ? DecorationImage(
+                            image: NetworkImage(_selectedStudent!['photo_url']),
+                            fit: BoxFit.cover,
+                          )
+                              : null,
+                        ),
+                        child: _selectedStudent!['photo_url'] == null
+                            ? Icon(Icons.person, size: 50, color: Colors.grey)
+                            : null,
+                      ),
+                      SizedBox(width: 24),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 24,
+                          runSpacing: 16,
+                          children: [
+                            ReadOnlyField(
+                                label: "Nom",
+                                value: "${_selectedStudent!['nom']} ${_selectedStudent!['prenom'] ?? ''}",
+                                icon: Icons.person),
+                            ReadOnlyField(
+                                label: "ID",
+                                value: _selectedStudent!['id_etudiant_genere'] ?? 'N/A',
+                                icon: Icons.vpn_key),
+                            ReadOnlyField(
+                                label: "Groupe",
+                                value: _selectedStudent!['groupe'] ?? 'N/A',
+                                icon: Icons.group),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                   Divider(height: 32),
-                  // 2. Gestion du Statut
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // Statut Académique
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Statut Académique:", style: Theme.of(context).textTheme.titleMedium),
+                          Text("Statut Académique:",
+                              style: Theme.of(context).textTheme.titleMedium),
                           if (isAdminOrControleur)
                             DropdownButton<String>(
                               value: _selectedStudent!['statut'],
-                              items: statuts.map((statut) => DropdownMenuItem(value: statut, child: Text(statut))).toList(),
+                              items: statuts
+                                  .map((statut) => DropdownMenuItem(
+                                  value: statut, child: Text(statut)))
+                                  .toList(),
                               onChanged: (newStatus) {
                                 if (newStatus != null) {
                                   _updateStudentStatus(newStatus);
@@ -206,25 +233,36 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                               },
                             )
                           else
-                            Text(_selectedStudent!['statut'], style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                            Text(_selectedStudent!['statut'] ?? 'N/A',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.bold)),
                         ],
                       ),
-                      // Statut Compte GOJIKA
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Compte GOJIKA:", style: Theme.of(context).textTheme.titleMedium),
+                          Text("Compte GOJIKA:",
+                              style: Theme.of(context).textTheme.titleMedium),
                           if (isAdminOrControleur)
                             Switch(
-                              value: _selectedStudent!['gojika_account_active'],
+                              value: _selectedStudent!['gojika_account_active'] ?? false,
                               onChanged: _updateGojikaStatus,
                             )
                           else
                             Text(
-                              _selectedStudent!['gojika_account_active'] ? "Activé" : "Désactivé",
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              (_selectedStudent!['gojika_account_active'] ?? false)
+                                  ? "Activé"
+                                  : "Désactivé",
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
                                 fontWeight: FontWeight.bold,
-                                color: _selectedStudent!['gojika_account_active'] ? Colors.green : Colors.grey,
+                                color: (_selectedStudent!['gojika_account_active'] ?? false)
+                                    ? Colors.green
+                                    : Colors.grey,
                               ),
                             ),
                         ],
@@ -236,7 +274,6 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
             ),
           ),
           SizedBox(height: 24),
-          // 3. Historique Financier
           Text("Historique Financier",
               style: Theme.of(context).textTheme.headlineSmall),
           SizedBox(height: 16),
@@ -256,16 +293,21 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                   DataColumn2(label: Text('Motif'), size: ColumnSize.L),
                   DataColumn2(label: Text('Mois'), size: ColumnSize.S),
                   DataColumn2(label: Text('Nº Reçu'), size: ColumnSize.M),
-                  DataColumn2(label: Text('Montant'), numeric: true, size: ColumnSize.M),
+                  DataColumn2(
+                      label: Text('Montant'),
+                      numeric: true,
+                      size: ColumnSize.M),
                 ],
                 rows: _studentPayments.map((p) {
                   final recu = p['recus'];
                   return DataRow(cells: [
-                    DataCell(Text(DateFormat('dd/MM/yy').format(DateTime.parse(recu['date_paiement'])))),
-                    DataCell(Text(p['motif'])),
+                    DataCell(Text(DateFormat('dd/MM/yy')
+                        .format(DateTime.parse(recu['date_paiement'])))),
+                    DataCell(Text(p['motif'] ?? 'N/A')),
                     DataCell(Text(p['mois_de'] ?? 'N/A')),
-                    DataCell(Text(recu['n_recu_principal'])),
-                    DataCell(Text('${NumberFormat.decimalPattern('fr').format(p['montant'])} Ar')),
+                    DataCell(Text(recu['n_recu_principal'] ?? 'N/A')),
+                    DataCell(Text(
+                        '${NumberFormat.decimalPattern('fr').format(p['montant'])} Ar')),
                   ]);
                 }).toList(),
               ),

@@ -23,6 +23,7 @@ dependencies:
   intl: ^0.20.2
   responsive_builder: ^0.7.1
   supabase_flutter: ^2.10.3
+  image_picker: ^1.1.2
 
 dev_dependencies:
   flutter_test:
