@@ -1,6 +1,7 @@
 // rejistra/lib/widgets/main_layout.dart
 // ignore_for_file: prefer_const_constructors, prefer_const_literals_to_create_immutables
 
+//import 'package://flutter/material.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -155,32 +156,37 @@ class _MainLayoutState extends State<MainLayout> {
                 ],
               ),
             ),
-            trailing: Expanded(
-              child: Padding(
-                padding: const EdgeInsets.only(bottom: 20.0),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.info_outline,
-                        // Mettre en surbrillance si la page 'À Propos' est active
-                        color: location == '/a-propos' ? Theme.of(context).colorScheme.primary : null,
-                      ),
-                      tooltip: 'À propos',
-                      onPressed: () => context.go('/a-propos'),
+
+            // --- CORRECTION OVERFLOW (Point 1) ---
+            // Le widget `Expanded` a été supprimé.
+            // Le `NavigationRail` place `trailing` en bas par défaut.
+            // `Expanded` causait un overflow lorsque la hauteur de la fenêtre était réduite.
+            trailing: Padding(
+              padding: const EdgeInsets.only(bottom: 20.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  IconButton(
+                    icon: Icon(Icons.info_outline,
+                      // Mettre en surbrillance si la page 'À Propos' est active
+                      color: location == '/a-propos' ? Theme.of(context).colorScheme.primary : null,
                     ),
-                    SizedBox(height: 10),
-                    IconButton(
-                      icon: Icon(Icons.logout, color: Colors.red.shade700),
-                      tooltip: 'Déconnexion',
-                      onPressed: () {
-                        context.read<AuthProvider>().logout();
-                      },
-                    ),
-                  ],
-                ),
+                    tooltip: 'À propos',
+                    onPressed: () => context.go('/a-propos'),
+                  ),
+                  SizedBox(height: 10),
+                  IconButton(
+                    icon: Icon(Icons.logout, color: Colors.red.shade700),
+                    tooltip: 'Déconnexion',
+                    onPressed: () {
+                      context.read<AuthProvider>().logout();
+                    },
+                  ),
+                ],
               ),
             ),
+            // --- FIN CORRECTION ---
+
             // 3. Construire les destinations à partir des items visibles
             destinations: visibleItems.map((item) {
               return NavigationRailDestination(

@@ -44,6 +44,13 @@ class _UserManagementPageState extends State<UserManagementPage> {
     );
   }
 
+  void _showEditUserDialog(Map<String, dynamic> profile) {
+    showDialog(
+      context: context,
+      builder: (context) => _EditUserDialog(profile: profile),
+    );
+  }
+
   Future<void> _deleteUser(String userId, String userName) async {
     final bool didConfirm = await showDialog(
       context: context,
@@ -61,8 +68,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
           ),
         ],
       ),
-    ) ??
-        false;
+    ) ?? false;
 
     if (didConfirm) {
       try {
@@ -88,13 +94,14 @@ class _UserManagementPageState extends State<UserManagementPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Barre de recherche et bouton créer
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
-                      labelText: 'Rechercher un utilisateur (nom, email)',
+                      labelText: 'Rechercher un utilisateur (nom, email, rôle, site)',
                       prefixIcon: Icon(Icons.search),
                       suffixIcon: _searchQuery.isNotEmpty
                           ? IconButton(
@@ -138,13 +145,18 @@ class _UserManagementPageState extends State<UserManagementPage> {
                     }
                     final allProfiles = snapshot.data ?? [];
 
+                    // Filtrage par recherche
                     final filteredProfiles = _searchQuery.isEmpty
                         ? allProfiles
                         : allProfiles.where((profile) {
                       final nom = (profile['nom_complet'] ?? '').toLowerCase();
                       final email = (profile['email'] ?? '').toLowerCase();
+                      final role = (profile['role'] ?? '').toLowerCase();
+                      final site = (profile['site_rattache'] ?? '').toLowerCase();
                       return nom.contains(_searchQuery) ||
-                          email.contains(_searchQuery);
+                          email.contains(_searchQuery) ||
+                          role.contains(_searchQuery) ||
+                          site.contains(_searchQuery);
                     }).toList();
 
                     if (filteredProfiles.isEmpty) {
@@ -156,8 +168,7 @@ class _UserManagementPageState extends State<UserManagementPage> {
                       horizontalMargin: 12,
                       minWidth: 700,
                       columns: const [
-                        DataColumn2(
-                            label: Text('Nom Complet'), size: ColumnSize.L),
+                        DataColumn2(label: Text('Nom Complet'), size: ColumnSize.L),
                         DataColumn2(label: Text('Email'), size: ColumnSize.L),
                         DataColumn2(label: Text('Rôle'), size: ColumnSize.M),
                         DataColumn2(label: Text('Site'), size: ColumnSize.S),
@@ -167,18 +178,15 @@ class _UserManagementPageState extends State<UserManagementPage> {
                         return DataRow(cells: [
                           DataCell(Text(profile['nom_complet'] ?? 'N/A')),
                           DataCell(Text(profile['email'] ?? 'N/A')),
-                          DataCell(Text(profile['role'] ?? 'N/A')),
+                          DataCell(_buildRoleChip(profile['role'])),
                           DataCell(Text(profile['site_rattache'] ?? 'N/A')),
                           DataCell(Row(
                             children: [
                               IconButton(
                                 icon: Icon(Icons.edit_outlined,
                                     color: Colors.blue, size: 20),
-                                tooltip: "Modifier (non implémenté)",
-                                onPressed: () {
-                                  showErrorSnackBar(context,
-                                      "La modification sera bientôt disponible.");
-                                },
+                                tooltip: "Modifier",
+                                onPressed: () => _showEditUserDialog(profile),
                               ),
                               IconButton(
                                 icon: Icon(Icons.delete_outline,
@@ -202,8 +210,35 @@ class _UserManagementPageState extends State<UserManagementPage> {
       ),
     );
   }
+
+  Widget _buildRoleChip(String? role) {
+    Color chipColor;
+    switch (role) {
+      case 'admin':
+        chipColor = Colors.red.shade100;
+        break;
+      case 'controleur':
+        chipColor = Colors.orange.shade100;
+        break;
+      case 'responsable':
+        chipColor = Colors.blue.shade100;
+        break;
+      case 'accueil':
+        chipColor = Colors.green.shade100;
+        break;
+      default:
+        chipColor = Colors.grey.shade100;
+    }
+    return Chip(
+      label: Text(role ?? 'N/A', style: TextStyle(fontSize: 12)),
+      backgroundColor: chipColor,
+      padding: EdgeInsets.zero,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
 }
 
+// Dialog pour créer un utilisateur
 class _AddUserDialog extends StatefulWidget {
   const _AddUserDialog({Key? key}) : super(key: key);
   @override
@@ -318,6 +353,129 @@ class _AddUserDialogState extends State<_AddUserDialog> {
           child: _isLoading
               ? CircularProgressIndicator(strokeWidth: 2)
               : Text('Créer'),
+        ),
+      ],
+    );
+  }
+}
+
+// Dialog pour modifier un utilisateur
+class _EditUserDialog extends StatefulWidget {
+  final Map<String, dynamic> profile;
+  const _EditUserDialog({Key? key, required this.profile}) : super(key: key);
+  @override
+  State<_EditUserDialog> createState() => _EditUserDialogState();
+}
+
+class _EditUserDialogState extends State<_EditUserDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nomController;
+  String? _selectedRole;
+  String? _selectedSite;
+  bool _isLoading = false;
+
+  final List<String> _roles = [
+    'admin',
+    'accueil',
+    'responsable',
+    'controleur',
+    'rp',
+    'enseignant'
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _nomController = TextEditingController(text: widget.profile['nom_complet']);
+    _selectedRole = widget.profile['role'];
+    _selectedSite = widget.profile['site_rattache'];
+  }
+
+  Future<void> _updateUser() async {
+    if (!_formKey.currentState!.validate()) return;
+    setState(() => _isLoading = true);
+
+    try {
+      await Supabase.instance.client.rpc('update_user_profile', params: {
+        'p_user_id': widget.profile['id'],
+        'p_nom_complet': _nomController.text.trim(),
+        'p_role': _selectedRole,
+        'p_site': _selectedSite,
+      });
+
+      if (!mounted) return;
+      showSuccessSnackBar(context, "Profil mis à jour avec succès.");
+      Navigator.of(context).pop();
+    } catch (e) {
+      if (!mounted) return;
+      showErrorSnackBar(context, "Erreur: $e");
+    }
+    setState(() => _isLoading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = context.read<DataProvider>().configOptions;
+    final sites = config['Site'] ?? [];
+
+    return AlertDialog(
+      title: Text('Modifier l\'utilisateur'),
+      content: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Email (lecture seule)
+              TextFormField(
+                initialValue: widget.profile['email'],
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  filled: true,
+                  fillColor: Colors.grey.shade200,
+                ),
+                enabled: false,
+              ),
+              SizedBox(height: 12),
+              TextFormField(
+                controller: _nomController,
+                decoration: InputDecoration(labelText: 'Nom Complet *'),
+                validator: (val) => val!.isEmpty ? 'Requis' : null,
+              ),
+              SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                decoration: InputDecoration(labelText: 'Rôle *'),
+                value: _selectedRole,
+                items: _roles
+                    .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedRole = val),
+                validator: (val) => val == null ? 'Requis' : null,
+              ),
+              SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                decoration: InputDecoration(labelText: 'Site Rattaché *'),
+                value: _selectedSite,
+                items: sites
+                    .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                    .toList(),
+                onChanged: (val) => setState(() => _selectedSite = val),
+                validator: (val) => val == null ? 'Requis' : null,
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Annuler'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _updateUser,
+          child: _isLoading
+              ? CircularProgressIndicator(strokeWidth: 2)
+              : Text('Enregistrer'),
         ),
       ],
     );

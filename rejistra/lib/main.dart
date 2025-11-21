@@ -6,7 +6,9 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+// --- CORRECTION DE L'IMPORTATION ---
 import 'package:shared/services/supabase_service.dart';
+// --- FIN DE LA CORRECTION ---
 import 'package:rejistra/providers/data_provider.dart';
 import 'package:rejistra/providers/auth_provider.dart';
 
@@ -28,7 +30,10 @@ import 'package:rejistra/screens/about_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. Initialiser Supabase (via le service partagé)
   await SupabaseService.initialize();
+
   runApp(
     MultiProvider(
       providers: [
@@ -71,7 +76,6 @@ class RejistraApp extends StatelessWidget {
             }
 
             // Redirection pour 'Responsable' et 'Controleur' vers le dashboard
-            // (Ils n'ont pas accès à l'inscription par défaut)
             if ((userRole == 'responsable' || userRole == 'controleur') && state.matchedLocation == '/inscription') {
               Future.microtask(() => context.go('/'));
               return Scaffold(body: Center(child: CircularProgressIndicator()));

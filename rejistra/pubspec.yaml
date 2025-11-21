@@ -2,18 +2,17 @@ name: rejistra
 description: "A new Flutter project."
 
 publish_to: 'none'
-# La ligne 'suffix.' a été supprimée d'ici.
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0' # J'ai ajusté ceci pour correspondre au SDK de votre prototype
+  sdk: '>=3.0.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
   shared:
-    path: ../shared # <- C'est correct
+    path: ../shared
   cupertino_icons: ^1.0.8
   go_router: ^16.3.0
   provider: ^6.1.5+1
@@ -23,7 +22,25 @@ dependencies:
   intl: ^0.20.2
   responsive_builder: ^0.7.1
   supabase_flutter: ^2.10.3
-  image_picker: ^1.1.2
+
+  # --- AJOUTS POUR LA PHASE 1 ---
+
+  # Pour l'exportation Excel
+  excel: ^4.0.0
+
+  # Pour la génération de PDF
+  pdf: ^3.10.8
+
+  # Pour l'impression/sauvegarde du PDF sur le web
+  printing: ^5.12.0
+
+  # Pour sauvegarder les fichiers (Excel) sur le web
+  universal_html: ^2.2.4
+
+  # --- AJOUT POUR CORRIGER LES ERREURS photo_uploader.dart ---
+  image_picker: ^1.1.2 # Ajout de la dépendance manquante
+
+  http: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -33,3 +50,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # --- AJOUT POUR LES PDF ---
+  assets:
+    - assets/fonts/

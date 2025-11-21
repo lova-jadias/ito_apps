@@ -9,6 +9,7 @@ import 'package:rejistra/providers/data_provider.dart';
 import 'package:rejistra/utils/helpers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:data_table_2/data_table_2.dart';
+import 'package:rejistra/services/export_service.dart';
 
 class EtatIndividuelPage extends StatefulWidget {
   const EtatIndividuelPage({Key? key}) : super(key: key);
@@ -75,6 +76,14 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
     }
   }
 
+  void _exportPdf() {
+    if (_selectedStudent == null) return;
+    ExportService.exportIndividuelToPdf(
+      student: _selectedStudent!,
+      payments: _studentPayments,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -91,9 +100,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
             Padding(
               padding: const EdgeInsets.only(right: 20.0),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  showSuccessSnackBar(context, "Export PDF non implémenté.");
-                },
+                onPressed: _exportPdf,
                 icon: Icon(Icons.picture_as_pdf, size: 18),
                 label: Text('Exporter en PDF'),
                 style: ElevatedButton.styleFrom(
@@ -117,7 +124,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                 }
                 final response = await _client
                     .from('etudiants')
-                    .select('id, id_etudiant_genere, nom, prenom, groupe, statut, gojika_account_active, photo_url')
+                    .select('id, id_etudiant_genere, nom, prenom, groupe, statut, site, gojika_account_active, photo_url')
                     .or(
                     'nom.ilike.%${textEditingValue.text}%,prenom.ilike.%${textEditingValue.text}%,id_etudiant_genere.ilike.%${textEditingValue.text}%')
                     .limit(10);
@@ -152,6 +159,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
   Widget _buildStudentReport(BuildContext context, bool isAdminOrControleur) {
     final config = context.read<DataProvider>().configOptions;
     final statuts = config['Statut'] ?? ['Actif', 'Abandon', 'Accord Spécial'];
+    final photoUrl = _selectedStudent!['photo_url'];
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(24),
@@ -167,27 +175,30 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Photo et informations principales
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Photo de profil
                       Container(
-                        width: 100,
-                        height: 100,
+                        width: 120,
+                        height: 120,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.grey.shade300, width: 2),
-                          image: _selectedStudent!['photo_url'] != null
+                          image: photoUrl != null && photoUrl.isNotEmpty
                               ? DecorationImage(
-                            image: NetworkImage(_selectedStudent!['photo_url']),
+                            image: NetworkImage(photoUrl),
                             fit: BoxFit.cover,
                           )
                               : null,
                         ),
-                        child: _selectedStudent!['photo_url'] == null
-                            ? Icon(Icons.person, size: 50, color: Colors.grey)
+                        child: photoUrl == null || photoUrl.isEmpty
+                            ? Icon(Icons.person, size: 60, color: Colors.grey)
                             : null,
                       ),
                       SizedBox(width: 24),
+                      // Informations
                       Expanded(
                         child: Wrap(
                           spacing: 24,
@@ -199,11 +210,15 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                                 icon: Icons.person),
                             ReadOnlyField(
                                 label: "ID",
-                                value: _selectedStudent!['id_etudiant_genere'] ?? 'N/A',
+                                value: _selectedStudent!['id_etudiant_genere'],
                                 icon: Icons.vpn_key),
                             ReadOnlyField(
+                                label: "Site",
+                                value: _selectedStudent!['site'],
+                                icon: Icons.apartment),
+                            ReadOnlyField(
                                 label: "Groupe",
-                                value: _selectedStudent!['groupe'] ?? 'N/A',
+                                value: _selectedStudent!['groupe'],
                                 icon: Icons.group),
                           ],
                         ),
@@ -233,7 +248,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                               },
                             )
                           else
-                            Text(_selectedStudent!['statut'] ?? 'N/A',
+                            Text(_selectedStudent!['statut'],
                                 style: Theme.of(context)
                                     .textTheme
                                     .titleMedium
@@ -255,10 +270,7 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                               (_selectedStudent!['gojika_account_active'] ?? false)
                                   ? "Activé"
                                   : "Désactivé",
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.bold,
                                 color: (_selectedStudent!['gojika_account_active'] ?? false)
                                     ? Colors.green
@@ -294,18 +306,16 @@ class _EtatIndividuelPageState extends State<EtatIndividuelPage> {
                   DataColumn2(label: Text('Mois'), size: ColumnSize.S),
                   DataColumn2(label: Text('Nº Reçu'), size: ColumnSize.M),
                   DataColumn2(
-                      label: Text('Montant'),
-                      numeric: true,
-                      size: ColumnSize.M),
+                      label: Text('Montant'), numeric: true, size: ColumnSize.M),
                 ],
                 rows: _studentPayments.map((p) {
                   final recu = p['recus'];
                   return DataRow(cells: [
                     DataCell(Text(DateFormat('dd/MM/yy')
                         .format(DateTime.parse(recu['date_paiement'])))),
-                    DataCell(Text(p['motif'] ?? 'N/A')),
+                    DataCell(Text(p['motif'])),
                     DataCell(Text(p['mois_de'] ?? 'N/A')),
-                    DataCell(Text(recu['n_recu_principal'] ?? 'N/A')),
+                    DataCell(Text(recu['n_recu_principal'])),
                     DataCell(Text(
                         '${NumberFormat.decimalPattern('fr').format(p['montant'])} Ar')),
                   ]);

@@ -9,6 +9,10 @@ import 'package:rejistra/utils/helpers.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:data_table_2/data_table_2.dart';
 
+// --- AJOUT POUR EXPORT ---
+import 'package:rejistra/services/export_service.dart';
+// --- FIN AJOUT ---
+
 class EtatGroupeBagPage extends StatefulWidget {
   const EtatGroupeBagPage({Key? key}) : super(key: key);
 
@@ -20,23 +24,23 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
   String? _selectedSite;
   String? _selectedGroupe;
   bool _isLoading = false;
+
+  // Stocker les résultats pour l'export (Variables de classe)
   List<DataColumn> _bagColumns = [];
   List<DataRow> _bagRows = [];
-  Map<String, int> _groupStats = {};
 
   Future<void> _generateReport() async {
     if (_selectedSite == null || _selectedGroupe == null) {
-      showErrorSnackBar(
-          context, "Veuillez sélectionner un Site ET un Groupe.");
+      showErrorSnackBar(context, "Veuillez sélectionner un Site ET un Groupe.");
       return;
     }
 
     setState(() => _isLoading = true);
     _bagColumns = [];
     _bagRows = [];
-    _groupStats = {};
 
     try {
+      // La logique RPC est INCHANGÉE
       final List<dynamic> result = await Supabase.instance.client.rpc(
         'get_bag_report',
         params: {
@@ -46,77 +50,62 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
       );
 
       if (result.isEmpty) {
-        showSuccessSnackBar(
-            context, "Aucun étudiant trouvé pour cette sélection.");
+        showSuccessSnackBar(context, "Aucun étudiant trouvé pour cette sélection.");
         setState(() => _isLoading = false);
         return;
       }
 
-      int effectifBrut = result.length;
-      int actifs = 0;
-      int abandons = 0;
-      int accords = 0;
-
-      for (var row in result) {
-        final statut = row['statut'] as String?;
-        if (statut == 'Actif') actifs++;
-        if (statut == 'Abandon') abandons++;
-        if (statut == 'Accord Spécial') accords++;
-      }
-
-      _groupStats = {
-        'effectif_brut': effectifBrut,
-        'actifs': actifs,
-        'abandons': abandons,
-        'accords': accords,
-      };
-
+      // Construire les colonnes avec largeurs adaptées
       final firstRow = result.first as Map<String, dynamic>;
       _bagColumns = firstRow.keys.map((key) {
+        // Déterminer la taille selon le type de colonne
+        ColumnSize columnSize;
+        if (key == 'id' || key.toLowerCase().contains('etudiant')) {
+          // ID Etudiant : largeur moyenne pour "23-25-T"
+          columnSize = ColumnSize.M;
+        } else if (key == 'nom' || key == 'prenom') {
+          // Nom et Prénom : largeur large
+          columnSize = ColumnSize.L;
+        } else {
+          // Autres colonnes : petite largeur
+          columnSize = ColumnSize.S;
+        }
+
         return DataColumn2(
-          label: Text(key == 'row_num' ? 'Nº' : key.replaceAll('_', ' '),
-              style: TextStyle(fontWeight: FontWeight.bold)),
-          size: (key == 'nom' || key == 'prenom')
-              ? ColumnSize.L
-              : (key == 'row_num'
-              ? ColumnSize.S
-              : ColumnSize.M),
-          numeric: key == 'row_num',
+          label: Text(
+            key.replaceAll('_', ' '),
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          size: columnSize,
+          numeric: false,
         );
       }).toList();
 
+      // Construire les lignes
       _bagRows = result.map((row) {
         return DataRow(
           cells: row.entries.map<DataCell>((cell) {
             final value = cell.value?.toString() ?? '-';
             final isStatus = cell.key == 'statut';
-            final isRecu = value != '-' &&
-                !isStatus &&
-                cell.key != 'id' &&
-                cell.key != 'row_num' &&
-                cell.key != 'id_etudiant_genere' &&
-                cell.key != 'nom' &&
-                cell.key != 'prenom';
+            final isRecu = value != '-' && !isStatus && cell.key != 'id' && cell.key != 'nom' && cell.key != 'prenom';
 
             Color? color = isStatus
-                ? (value == 'Abandon'
-                ? Colors.red
-                : (value == 'Accord Spécial'
-                ? Colors.orange
-                : Colors.green))
+                ? (value == 'Abandon' ? Colors.red : (value == 'Accord Spécial' ? Colors.orange : Colors.green))
                 : (isRecu ? Colors.blue.shade800 : null);
 
             return DataCell(
-              Text(
-                value,
-                style: TextStyle(
-                    color: color,
-                    fontWeight: isStatus ? FontWeight.bold : null),
-              ),
+                Text(
+                  value,
+                  style: TextStyle(color: color, fontWeight: isStatus ? FontWeight.bold : null),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                  softWrap: false,
+                )
             );
           }).toList(),
         );
       }).toList();
+
     } catch (e) {
       showErrorSnackBar(context, "Erreur RPC: $e");
     }
@@ -124,13 +113,38 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
     setState(() => _isLoading = false);
   }
 
+  // --- ACTIONS D'EXPORT (Point 4 & 5) ---
+  void _exportExcel() {
+    if (_bagRows.isEmpty || _selectedGroupe == null) return;
+    ExportService.exportGroupeToExcel(
+      columns: _bagColumns,
+      rows: _bagRows,
+      groupe: _selectedGroupe!,
+    );
+    showSuccessSnackBar(context, "Génération Excel en cours...");
+  }
+
+  void _exportPdf() {
+    if (_bagRows.isEmpty || _selectedGroupe == null || _selectedSite == null) return;
+    ExportService.exportGroupeToPdf(
+      columns: _bagColumns,
+      rows: _bagRows,
+      site: _selectedSite!,
+      groupe: _selectedGroupe!,
+    );
+  }
+  // --- FIN ACTIONS D'EXPORT ---
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final config = context.watch<DataProvider>().configOptions;
     final user = context.watch<AuthProvider>().currentUser;
-    final isFullAccess = user?.role == 'admin' ||
-        user?.role == 'controleur' ||
-        user?.site == 'FULL';
+    final isFullAccess = user?.role == 'admin' || user?.role == 'controleur' || user?.site == 'FULL';
 
     if (!isFullAccess && _selectedSite == null) {
       _selectedSite = user?.site;
@@ -143,15 +157,31 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
         backgroundColor: Colors.white,
         elevation: 0,
         actions: [
+          // --- BOUTONS D'EXPORT ---
           if (_bagRows.isNotEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
               child: ElevatedButton.icon(
-                onPressed: () {
-                  showSuccessSnackBar(context, "Export Excel non implémenté.");
-                },
+                onPressed: _exportExcel,
                 icon: Icon(Icons.grid_on, size: 18),
                 label: Text('Exporter Excel'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade700,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          if (_bagRows.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(right: 20.0, left: 4.0, top: 8.0, bottom: 8.0),
+              child: ElevatedButton.icon(
+                onPressed: _exportPdf,
+                icon: Icon(Icons.picture_as_pdf, size: 18),
+                label: Text('Exporter PDF'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ),
         ],
@@ -159,7 +189,6 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
       body: Column(
         children: [
           _buildFilterBar(config, isFullAccess),
-          if (_groupStats.isNotEmpty) _buildStatsBar(),
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator())
@@ -172,7 +201,10 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
                 child: DataTable2(
                   columnSpacing: 12,
                   horizontalMargin: 12,
-                  minWidth: 1400,
+                  minWidth: 2500,
+                  dataRowHeight: 40,
+                  headingRowHeight: 50,
+                  showBottomBorder: true,
                   columns: _bagColumns,
                   rows: _bagRows,
                 ),
@@ -198,12 +230,9 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
               decoration: InputDecoration(labelText: 'Site *'),
               value: _selectedSite,
               items: (config['Site'] ?? [])
-                  .map((item) =>
-                  DropdownMenuItem(value: item, child: Text(item)))
+                  .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
-              onChanged: isFullAccess
-                  ? (val) => setState(() => _selectedSite = val)
-                  : null,
+              onChanged: isFullAccess ? (val) => setState(() => _selectedSite = val) : null,
             ),
           ),
           SizedBox(
@@ -212,8 +241,7 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
               decoration: InputDecoration(labelText: 'Groupe *'),
               value: _selectedGroupe,
               items: (config['Groupe'] ?? [])
-                  .map((item) =>
-                  DropdownMenuItem(value: item, child: Text(item)))
+                  .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                   .toList(),
               onChanged: (val) => setState(() => _selectedGroupe = val),
             ),
@@ -225,80 +253,6 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildStatsBar() {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-      decoration: BoxDecoration(
-        color: Colors.blue.shade50,
-        border: Border(
-          top: BorderSide(color: Colors.blue.shade200),
-          bottom: BorderSide(color: Colors.blue.shade200),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _StatChip(
-              label: 'Site',
-              value: _selectedSite ?? 'N/A',
-              color: Colors.blue),
-          _StatChip(
-              label: 'Groupe',
-              value: _selectedGroupe ?? 'N/A',
-              color: Colors.purple),
-          _StatChip(
-              label: 'Effectif Brut',
-              value: '${_groupStats['effectif_brut']}',
-              color: Colors.teal),
-          _StatChip(
-              label: 'Actifs',
-              value: '${_groupStats['actifs']}',
-              color: Colors.green),
-          _StatChip(
-              label: 'Accord Spécial',
-              value: '${_groupStats['accords']}',
-              color: Colors.orange),
-          _StatChip(
-              label: 'Abandons',
-              value: '${_groupStats['abandons']}',
-              color: Colors.red),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color color;
-
-  const _StatChip(
-      {required this.label, required this.value, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade700)),
-        SizedBox(height: 4),
-        Container(
-          padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color, width: 2),
-          ),
-          child: Text(
-            value,
-            style: TextStyle(
-                fontSize: 16, fontWeight: FontWeight.bold, color: color),
-          ),
-        ),
-      ],
     );
   }
 }
