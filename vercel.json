@@ -1,15 +1,7 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "rejistra/web/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/rejistra/web/$1"
-    }
-  ]
+  "buildCommand": "cd rejistra && flutter build web --release --dart-define=SUPABASE_URL=$SUPABASE_URL --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY",
+  "outputDirectory": "rejistra/build/web",
+  "installCommand": "cd rejistra && flutter pub get",
+  "framework": "flutter"
 }
