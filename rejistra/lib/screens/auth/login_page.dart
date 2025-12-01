@@ -13,9 +13,8 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
   bool _passwordVisible = false;
 
-  // Pré-remplir pour les tests (vous pouvez les enlever plus tard)
-  final _emailController = TextEditingController(text: "admin@ito.mg");
-  final _passwordController = TextEditingController(text: "password");
+    final _emailController = TextEditingController(text: "@ito.mg");
+  final _passwordController = TextEditingController(text: "");
 
   void _login() async {
     // Empêcher les double-clics

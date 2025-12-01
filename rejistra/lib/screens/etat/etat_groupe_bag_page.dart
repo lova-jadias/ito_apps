@@ -54,6 +54,24 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
         setState(() => _isLoading = false);
         return;
       }
+      // --- CORRECTION DÉBUT ---
+
+      // 1. TRIER par "id_etudiant_genere" (la colonne exacte renvoyée par votre RPC)
+      result.sort((a, b) {
+        final idA = a['id_etudiant_genere']?.toString() ?? '';
+        final idB = b['id_etudiant_genere']?.toString() ?? '';
+
+        // Tri alphabétique croissant (ex: 1-25-T avant 10-25-T)
+        return idA.compareTo(idB);
+      });
+
+      // 2. RÉ-NUMÉROTER la colonne "row_num"
+      for (int i = 0; i < result.length; i++) {
+        // 'row_num' est le nom de la colonne défini dans votre RPC
+        result[i]['row_num'] = i + 1;
+      }
+
+      // --- CORRECTION FIN ---
 
       // Construire les colonnes avec largeurs adaptées
       final firstRow = result.first as Map<String, dynamic>;
@@ -61,7 +79,7 @@ class _EtatGroupeBagPageState extends State<EtatGroupeBagPage> {
         // Déterminer la taille selon le type de colonne
         ColumnSize columnSize;
         if (key == 'id' || key.toLowerCase().contains('etudiant')) {
-          // ID Etudiant : largeur moyenne pour "23-25-T"
+
           columnSize = ColumnSize.M;
         } else if (key == 'nom' || key == 'prenom') {
           // Nom et Prénom : largeur large
