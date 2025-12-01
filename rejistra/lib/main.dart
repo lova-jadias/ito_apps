@@ -27,22 +27,67 @@ import 'package:rejistra/screens/admin/admin_edit_page.dart';
 import 'package:rejistra/screens/admin/audit_log_page.dart';
 import 'package:rejistra/screens/about_page.dart';
 
+import 'package:rejistra/services/sync_service.dart';
+import 'package:rejistra/services/offline_cache_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Initialiser Supabase (via le service partagé)
-  await SupabaseService.initialize();
+  try {
+    // 1. Initialiser Supabase
+    await SupabaseService.initialize();
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (context) => AuthProvider()),
-        ChangeNotifierProvider(create: (context) => DataProvider()),
-      ],
-      child: const RejistraApp(),
-    ),
-  );
+    // 2. Initialiser le service de synchronisation
+    final syncService = SyncService(Supabase.instance.client);
+    await syncService.initialize();
+
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (context) => AuthProvider()),
+          ChangeNotifierProvider(create: (context) => DataProvider(syncService)),
+        ],
+        child: const RejistraApp(),
+      ),
+    );
+  } catch (e) {
+    print("Erreur critique d'initialisation: $e");
+    runApp(
+      ErrorApp(
+        errorMessage: "Erreur de démarrage de l'application: $e",
+      ),
+    );
+  }
+}
+
+// Ajoutez cette classe simple en bas de main.dart
+class ErrorApp extends StatelessWidget {
+  final String errorMessage;
+  const ErrorApp({super.key, required this.errorMessage});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, color: Colors.red, size: 60),
+              const SizedBox(height: 16),
+              const Text("Erreur Critique", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              // Afficher le message pour un diagnostic (à retirer en production)
+              Text(errorMessage, textAlign: TextAlign.center, style: TextStyle(color: Colors.red.shade700)),
+              const SizedBox(height: 24),
+              const Text("Veuillez contacter le support technique."),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class RejistraApp extends StatelessWidget {

@@ -24,7 +24,7 @@ class AboutPage extends StatelessWidget {
                 children: [
                   Text('iTo REJISTRA',
                       style: Theme.of(context).textTheme.headlineMedium),
-                  Text('Version 1.0.0 (Phase 1 Complétée)',
+                  Text('Version 1.1.0',
                       style: Theme.of(context).textTheme.titleSmall),
                   const Divider(height: 32),
                   Text(
@@ -40,7 +40,7 @@ class AboutPage extends StatelessWidget {
                     "Développée avec Flutter et propulsée par Supabase, iTo REJISTRA est la tour de contrôle de votre établissement.",
                   ),
                   const SizedBox(height: 24),
-                  Text("Concepteur: RAKOTOVAOARISON Lova Justin",
+                  Text("Concepteur: iTo_ 2025",
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),

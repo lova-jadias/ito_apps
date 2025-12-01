@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:rejistra/providers/auth_provider.dart';
+import 'package:rejistra/widgets/sync_status_indicator.dart';
 
 // Enum pour les pages, pour clarifier la logique
 enum AppPage { dashboard, inscription, paiements, etat, admin, apropos }
@@ -166,6 +167,8 @@ class _MainLayoutState extends State<MainLayout> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
+                  SyncStatusIndicator(), // ⬅️ Synchronisation de status
+                  SizedBox(height: 10),
                   IconButton(
                     icon: Icon(Icons.info_outline,
                       // Mettre en surbrillance si la page 'À Propos' est active
