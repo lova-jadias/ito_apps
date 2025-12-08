@@ -7,12 +7,15 @@ plugins {
 
 android {
     namespace = "com.example.gojika"
+    // S'assurer que compileSdk est à 34 ou plus pour de meilleures pratiques, si possible
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // >>> CORRECTION ICI : Ajout de "is" au début
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -22,8 +25,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.gojika"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Vous pouvez mettre à jour le minSdkVersion ici si nécessaire (>= 21 recommandé)
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -37,6 +39,11 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    // Required for core library desugaring
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {
