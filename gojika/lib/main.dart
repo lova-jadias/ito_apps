@@ -3,47 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared/services/supabase_service.dart';
+
 import 'config/theme.dart';
-import 'package:gojika/providers/gojika_provider.dart';
-import 'screens/auth/login_page.dart';
-import 'screens/splash_screen.dart';
-
-import 'config/router.dart'; // Import du router
-
-class GojikaApp extends StatelessWidget {
-  const GojikaApp({Key? key}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => GojikaProvider()..initialize(),
-        ),
-      ],
-      child: MaterialApp(
-        title: 'GOJIKA - Suivi Pédagogique',
-        debugShowCheckedModeBanner: false,
-        theme: GojikaTheme.lightTheme,
-        darkTheme: GojikaTheme.darkTheme,
-        themeMode: ThemeMode.system,
-        locale: const Locale('fr', 'FR'),
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-        ],
-        supportedLocales: const [
-          Locale('fr', 'FR'),
-        ],
-        home: const SplashScreen(),
-      ),
-    );
-  }
-}
-
-
-
+import 'config/router.dart'; // ✅ Import du router
+import 'providers/gojika_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,3 +20,34 @@ void main() async {
   runApp(const GojikaApp());
 }
 
+class GojikaApp extends StatelessWidget {
+  const GojikaApp({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(
+          create: (_) => GojikaProvider()..initialize(),
+        ),
+      ],
+      child: MaterialApp.router( // ✅ Utiliser MaterialApp.router
+        title: 'GOJIKA - Suivi Pédagogique',
+        debugShowCheckedModeBanner: false,
+        theme: GojikaTheme.lightTheme,
+        darkTheme: GojikaTheme.darkTheme,
+        themeMode: ThemeMode.system,
+        routerConfig: goRouter, // ✅ Injecter le router
+        locale: const Locale('fr', 'FR'),
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('fr', 'FR'),
+        ],
+      ),
+    );
+  }
+}

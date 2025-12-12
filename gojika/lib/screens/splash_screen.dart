@@ -4,10 +4,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/theme.dart';
 import 'auth/login_page.dart';
 import 'roles/student/student_home.dart';
-//import 'roles/student/student_home.dart';
 import 'roles/rp/rp_home.dart';
 import 'roles/admin/admin_home.dart';
 import 'roles/responsable/responsable_home.dart';
+import 'package:go_router/go_router.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({Key? key}) : super(key: key);
@@ -31,9 +31,7 @@ class _SplashScreenState extends State<SplashScreen> {
     final session = Supabase.instance.client.auth.currentSession;
 
     if (session == null) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
+      context.go('/login');
       return;
     }
 
@@ -47,31 +45,32 @@ class _SplashScreenState extends State<SplashScreen> {
 
       final role = profile['role'] as String;
 
-      Widget homePage;
+      String routePath;
       switch (role) {
         case 'admin':
-          homePage = const AdminHomePage();
+          routePath = '/admin-home';
           break;
         case 'rp':
-          homePage = const RPHomePage();
+          routePath = '/rp-home';
           break;
         case 'responsable':
-          homePage = const ResponsableHomePage();
+          routePath = '/responsable-home';
           break;
         case 'etudiant':
-          homePage = const StudentHomePage();
+          routePath = '/student-home';
           break;
         default:
-          homePage = const LoginPage();
+          routePath = '/login';
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => homePage),
-      );
+      if (mounted) {
+        context.go(routePath);
+      }
     } catch (e) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
+      debugPrint('Erreur profil: $e');
+      if (mounted) {
+        context.go('/login');
+      }
     }
   }
 

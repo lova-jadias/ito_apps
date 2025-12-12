@@ -7,6 +7,8 @@ import '../roles/student/student_home.dart';
 import '../roles/rp/rp_home.dart';
 import '../roles/admin/admin_home.dart';
 import '../roles/responsable/responsable_home.dart';
+import 'force_password_reset_page.dart';
+import 'package:go_router/go_router.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);
@@ -44,7 +46,6 @@ class _LoginPageState extends State<LoginPage> {
         throw Exception('Connexion échouée');
       }
 
-      // Récupérer le profil
       final profile = await Supabase.instance.client
           .from('profiles')
           .select('role, site_rattache, nom_complet')
@@ -55,30 +56,39 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      Widget homePage;
-      switch (role) {
-        case 'admin':
-          homePage = const AdminHomePage();
-          break;
-        case 'rp':
-          homePage = const RPHomePage();
-          break;
-        case 'responsable':
-          homePage = const ResponsableHomePage();
-          break;
-        case 'etudiant':
-          homePage = const StudentHomePage();
-          break;
-        default:
-          throw Exception('Rôle non reconnu');
+      String routePath;
+
+      if (role == 'etudiant') {
+        final mustReset = await Supabase.instance.client
+            .rpc('check_password_reset_required', params: {
+          'user_id': response.user!.id
+        }) as bool;
+
+        routePath = mustReset ? '/force-reset' : '/student-home';
+      } else {
+        switch (role) {
+          case 'admin':
+            routePath = '/admin-home';
+            break;
+          case 'rp':
+            routePath = '/rp-home';
+            break;
+          case 'responsable':
+            routePath = '/responsable-home';
+            break;
+          default:
+            throw Exception('Rôle non reconnu: $role');
+        }
       }
 
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => homePage),
-      );
+      // ✅ Utiliser GoRouter au lieu de Navigator
+      if (mounted) {
+        context.go(routePath);
+      }
     } on AuthException catch (e) {
-      _showError(e.message);
+      _showError(_getAuthErrorMessage(e.message));
     } catch (e) {
+      debugPrint('Erreur login: $e');
       _showError('Une erreur est survenue. Veuillez réessayer.');
     } finally {
       if (mounted) {
@@ -87,13 +97,32 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  String _getAuthErrorMessage(String message) {
+    if (message.contains('Invalid login credentials')) {
+      return 'Email ou mot de passe incorrect';
+    } else if (message.contains('Email not confirmed')) {
+      return 'Veuillez confirmer votre email';
+    } else {
+      return message;
+    }
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Row(
+          children: [
+            const Icon(Iconsax.danger, color: Colors.white),
+            const SizedBox(width: 12),
+            Expanded(child: Text(message)),
+          ],
+        ),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
       ),
     );
   }
@@ -116,7 +145,6 @@ class _LoginPageState extends State<LoginPage> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo
                       Hero(
                         tag: 'logo',
                         child: Container(
@@ -135,21 +163,15 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                           ),
                         ),
-                      )
-                          .animate()
-                          .scale(duration: 600.ms, curve: Curves.elasticOut),
+                      ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
 
                       const SizedBox(height: 30),
 
-                      // Titre
                       Text(
                         'Bienvenue sur GOJIKA',
                         style: GojikaTheme.titleLarge.copyWith(fontSize: 28),
                         textAlign: TextAlign.center,
-                      )
-                          .animate()
-                          .fadeIn(delay: 200.ms)
-                          .slideY(begin: 0.3, end: 0),
+                      ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.3, end: 0),
 
                       const SizedBox(height: 10),
 
@@ -161,14 +183,10 @@ class _LoginPageState extends State<LoginPage> {
                           height: 1.5,
                         ),
                         textAlign: TextAlign.center,
-                      )
-                          .animate()
-                          .fadeIn(delay: 300.ms)
-                          .slideY(begin: 0.3, end: 0),
+                      ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.3, end: 0),
 
                       const SizedBox(height: 40),
 
-                      // Carte du formulaire
                       Card(
                         elevation: 8,
                         shape: RoundedRectangleBorder(
@@ -178,13 +196,13 @@ class _LoginPageState extends State<LoginPage> {
                           padding: const EdgeInsets.all(24),
                           child: Column(
                             children: [
-                              // Email
                               TextFormField(
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
-                                decoration: InputDecoration(
+                                textInputAction: TextInputAction.next,
+                                decoration: const InputDecoration(
                                   labelText: 'Email',
-                                  prefixIcon: const Icon(Iconsax.direct),
+                                  prefixIcon: Icon(Iconsax.direct),
                                   hintText: 'votre.email@ito.mg',
                                 ),
                                 validator: (value) {
@@ -200,18 +218,17 @@ class _LoginPageState extends State<LoginPage> {
 
                               const SizedBox(height: 20),
 
-                              // Mot de passe
                               TextFormField(
                                 controller: _passwordController,
                                 obscureText: _obscurePassword,
+                                textInputAction: TextInputAction.done,
+                                onFieldSubmitted: (_) => _login(),
                                 decoration: InputDecoration(
                                   labelText: 'Mot de passe',
                                   prefixIcon: const Icon(Iconsax.lock),
                                   suffixIcon: IconButton(
                                     icon: Icon(
-                                      _obscurePassword
-                                          ? Iconsax.eye_slash
-                                          : Iconsax.eye,
+                                      _obscurePassword ? Iconsax.eye_slash : Iconsax.eye,
                                     ),
                                     onPressed: () {
                                       setState(() {
@@ -230,7 +247,6 @@ class _LoginPageState extends State<LoginPage> {
 
                               const SizedBox(height: 30),
 
-                              // Bouton connexion
                               SizedBox(
                                 width: double.infinity,
                                 height: 50,
@@ -239,6 +255,7 @@ class _LoginPageState extends State<LoginPage> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: GojikaTheme.primaryBlue,
                                     foregroundColor: Colors.white,
+                                    disabledBackgroundColor: Colors.grey[300],
                                   ),
                                   child: _isLoading
                                       ? const SizedBox(
@@ -246,9 +263,7 @@ class _LoginPageState extends State<LoginPage> {
                                     height: 24,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor:
-                                      AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
                                       : const Text(
@@ -263,14 +278,10 @@ class _LoginPageState extends State<LoginPage> {
                             ],
                           ),
                         ),
-                      )
-                          .animate()
-                          .fadeIn(delay: 400.ms)
-                          .slideY(begin: 0.3, end: 0),
+                      ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.3, end: 0),
 
                       const SizedBox(height: 20),
 
-                      // Version
                       Text(
                         'GOJIKA v1.0.0 - MVP Phase 2',
                         style: TextStyle(
